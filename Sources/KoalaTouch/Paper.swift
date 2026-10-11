@@ -119,6 +119,8 @@ enum KoalaTouchArtwork {
         guard args.count > 1 else { return false }
         do {
             switch args[1] {
+            case "--render-push" where args.count == 3:
+                try PushPreviewArtwork.write(to: URL(fileURLWithPath: args[2], isDirectory: true))
             case "--render-icon" where args.count == 3:
                 try writeIconset(to: URL(fileURLWithPath: args[2], isDirectory: true))
             case "--render-controls" where args.count == 3:

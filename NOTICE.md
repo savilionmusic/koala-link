@@ -14,5 +14,11 @@ publisher's request. A general standalone font licence is not supplied here.
 
 ## Product names
 
-Koala Sampler, Akai MPC Touch and DisplayLink are names of their respective
+Koala Sampler, Ableton Push 2, Akai MPC Touch and DisplayLink are names of their respective
 owners. Install Koala Sampler and DisplayLink Manager separately.
+
+## Push screen typeface
+
+When Koala is installed, Koala Link registers Koala's locally installed
+Dosis-Medium font for this process only. No Koala font or other Koala app asset
+is copied into the Koala Link app or installer. A macOS system font is the fallback.

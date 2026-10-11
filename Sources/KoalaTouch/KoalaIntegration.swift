@@ -13,8 +13,8 @@ final class KoalaIntegration {
 
     /// `accessibilityOptional`: without Accessibility, Koala still opens (where macOS puts it, not
     /// fullscreen) instead of failing. For Koala on the Mac's display with the Push.
-    func open(on screen: NSScreen, accessibilityOptional: Bool = false, completion: @escaping (Result<NSRunningApplication, Error>) -> Void) {
-        let placement = AXIsProcessTrusted()
+    func open(on screen: NSScreen, accessibilityOptional: Bool = false, placeWindow: Bool = true, completion: @escaping (Result<NSRunningApplication, Error>) -> Void) {
+        let placement = placeWindow && AXIsProcessTrusted()
         guard placement || accessibilityOptional else {
             completion(.failure(KoalaIntegrationError.accessibilityRequired))
             return
@@ -65,7 +65,7 @@ final class KoalaIntegration {
             guard let self else { return }
             if let application {
                 guard self.placement else {
-                    self.onStatus?("Koala is open. For fullscreen, allow Koala Link in Privacy & Security → Accessibility.")
+                    self.onStatus?("Koala is open on the Mac display.")
                     completion(.success(application))
                     return
                 }

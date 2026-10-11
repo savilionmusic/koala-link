@@ -1,30 +1,41 @@
 # Koala Link
 
-Use Koala Sampler on an Akai MPC Touch, with its screen, pads, banks, Q-Links
-and transport controls. Koala Link is free to download and use. MPC Touch is
-the currently supported controller; Push 2 support is planned.
+Use Koala Sampler with an Akai MPC Touch or Ableton Push 2. Koala Link is free
+to download and use. Choose **MPC Touch** or **Push 2** in the startup window;
+change controllers later from the Koala Link menu. Push 2 support is a preview:
+the build succeeds and its screen artwork has been rendered and visually reviewed
+offline. Physical Push hardware validation is still pending.
 
-**[Download the installer](https://github.com/savilionmusic/koala-link/releases/latest)**
+MPC Touch's stable release line is **1.3.0**. The Push 2 preview is
+**1.4.0-preview.1** (app version **1.4.0**, build **8**).
+
+**[Download the Push 2 preview installer](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.0-preview.1)** · [MPC Touch stable installer](https://github.com/savilionmusic/koala-link/releases/tag/v1.3.0)
+
+![Koala Link controller choice](docs/screens/Koala-Link-Controller-Choice.png)
+
+[Push screen previews](docs/screens/Koala-Link-Push-Screens.png) · [Complete Push controls](docs/PUSH2-CONTROLS.md)
 
 ## Requirements
 
-- An Apple silicon Mac running macOS 13 or later.
-- An Akai MPC Touch.
-- [Koala Sampler for Mac](https://www.koalasampler.com/download/).
-- [DisplayLink Manager](https://www.synaptics.com/products/displaylink-graphics/downloads/macos) for the MPC screen.
+- An Apple silicon Mac running macOS 13 or later, and Koala Sampler for Mac.
+- Either an Akai MPC Touch (with DisplayLink Manager), or an Ableton Push 2
+  connected by USB. Close Ableton Live while Koala Link uses the Push display,
+  and quit Paper Cut if it is using the Push.
 
 ## Install
 
 1. Download **Koala-Link-Installer.pkg** from Releases and run it.
-2. Open Koala Link from Applications with the MPC connected.
-3. Allow **Koala Link** and **mpc_touchd** in System Settings → Privacy & Security → Accessibility when prompted.
+2. Open Koala Link from Applications and choose your controller. Connect and
+   power the Push 2 before choosing it; connect the MPC Touch before choosing it.
+3. For MPC Touch, allow **Koala Link** and **mpc_touchd** in System Settings
+   → Privacy & Security → Accessibility when prompted.
 
 Koala Link replaces Koala Touch and keeps your existing Koala MIDI settings.
 
 The app and installer use ad-hoc signing and are not notarized. If macOS blocks
 the download, use the Open Anyway control in Privacy & Security.
 
-## Controls
+## MPC Touch controls
 
 Koala fills the MPC screen. The four pad banks provide 64 sample pads;
 Q-Links, FULL LEVEL, 16 LEVELS, REC and PLAY control Koala. Quitting Koala
@@ -54,8 +65,10 @@ sample bank and sample-pad notes 36–99. The Chopper's own chop count and
 **CHOP: NOTE** setting control how it responds to the notes. With fewer chops,
 Koala wraps notes across the available slices, including smaller and odd chop
 counts. C−1 is not the first chop. With 128 chops, these four banks still play
-chops 1–64. Reaching chops 65–128 needs another page, with the MIDI note ceiling
-handled and the behavior confirmed live in Koala.
+chops 1–64. Reaching chops 65–128 would require another page, with the MIDI
+note ceiling handled and the behavior confirmed live in Koala; that is not
+part of the MPC mapping described here.
+
 Koala Link follows the keyboard state in Koala's restored song and native
 Sequence keyboard-button taps, as well as the physical **16 LEVELS** button.
 Held notes keep their original assignment until release, even if the bank or
@@ -73,6 +86,12 @@ zoom in the sample editor and piano roll. The installer sets pinch gain to
 500. A 1024×640 MPC display mode made small Koala controls easier to touch on
 the development setup; the driver follows the screen's current resolution.
 
+Preview the Push screens offline (no controller or MIDI endpoints are opened):
+
+```sh
+"build/Koala Link.app/Contents/MacOS/KoalaTouch" --render-push /tmp/koala-link-screens
+```
+
 ## Build
 
 Install Xcode Command Line Tools, then run:
@@ -84,6 +103,10 @@ Install Xcode Command Line Tools, then run:
 
 The app is written to `build/Koala Link.app`; the installer is written to
 `dist/Koala-Link-Installer.pkg`. Building does not install either one.
+
+Push controls and current validation limits are in the
+[Push 2 controls](docs/PUSH2-CONTROLS.md) and
+[Push 2 research](docs/PUSH2-RESEARCH.md) notes.
 
 `TouchDriver/` contains the driver source and the accepted signed binaries
 used by the app. App builds copy those binaries without re-signing them.
@@ -104,7 +127,6 @@ Koala Link is an independent companion app for Koala Sampler and supported contr
 
 ## More controllers
 
-Koala Link is the project name for future controller support. The next planned
-controller is Ableton Push 2, with custom screens and controls. See the
-[Push 2 research and adaptation plan](docs/PUSH2-RESEARCH.md), including the
-Koala Chopper rules that the new controller must preserve.
+The controller picker keeps the MPC and Push sessions separate. See the
+[Push 2 control reference](docs/PUSH2-CONTROLS.md) and
+[implementation and validation status](docs/PUSH2-RESEARCH.md).

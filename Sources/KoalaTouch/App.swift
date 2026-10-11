@@ -24,14 +24,18 @@ private enum KoalaTouchMain {
 ///
 /// When Koala quits, Koala Link lets the MPC go and quits too.
 ///
-/// It is the Koala + MPC Touch part of Paper Picker (2026-10), on its own: no Push, no picker. Paper Cut uses the same MPC,
-/// so the two never run at once.
+/// The launcher owns one selected hardware session: MPC Touch or Push 2.
+/// Paper Cut uses the same devices, so the two never run at once.
 final class KoalaTouchApp: NSObject, NSApplicationDelegate {
     private let koalaBundleID = "com.elf-audio.koala-mac"
     private let paperCutBundleID = "com.savilion.mpctouch.instrument"
     private var cards: [NSWindow] = []
     private var statusItem: NSStatusItem?
     private var bridge: KoalaMIDIBridge?
+    private var pushBridge: PushKoalaBridge?
+    private var choiceWindow: ControllerChoiceWindow?
+    private var controllerChoice: KoalaControllerChoice?
+    private var sessionGeneration = 0
     private var integration: KoalaIntegration?
     private var overlay: KoalaTouchOverlay?
     private var koala: NSRunningApplication?
@@ -55,7 +59,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         PickerLog.write("Koala Link \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") started")
         screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                                 object: nil, queue: .main) { [weak self] _ in self?.screensChanged() }
-        start()
+        chooseController()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -65,6 +69,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         overlay?.stop()
         bridge?.setRoutingEnabled(false)
         bridge?.stop()
+        pushBridge?.stop(); choiceWindow?.close()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let terminationObserver { NSWorkspace.shared.notificationCenter.removeObserver(terminationObserver) }
         PickerLog.write("Koala Link quit")
@@ -74,6 +79,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
     private func installMenu() {
         let main = NSMenu(), appItem = NSMenuItem(), appMenu = NSMenu()
         appMenu.addItem(item("Open Koala Again", #selector(openAgain), "o"))
+        appMenu.addItem(item("Choose Controller…", #selector(chooseController), ""))
         appMenu.addItem(.separator())
         appMenu.addItem(item("Quit Koala Link", #selector(quit), "q"))
         appItem.submenu = appMenu; main.addItem(appItem); NSApp.mainMenu = main
@@ -81,6 +87,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         status.button?.title = "Koala Link"
         let menu = NSMenu()
         menu.addItem(item("Open Koala Again", #selector(openAgain), "o"))
+        menu.addItem(item("Choose Controller…", #selector(chooseController), ""))
         menu.addItem(.separator())
         menu.addItem(item("Quit Koala Link", #selector(quit), "q"))
         status.menu = menu; statusItem = status
@@ -90,6 +97,29 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
     }
     @objc private func openAgain() {
         guard koala == nil else { koala?.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]); return }
+        start()
+    }
+    @objc private func chooseController() {
+        if choiceWindow == nil {
+            let choice = ControllerChoiceWindow()
+            choice.onChoose = { [weak self] selected in self?.selectController(selected) }
+            choiceWindow = choice
+        }
+        choiceWindow?.showWindow(nil); choiceWindow?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    private func selectController(_ selected: KoalaControllerChoice) {
+        sessionGeneration += 1; retry?.invalidate(); retry = nil
+        watch?.invalidate(); watch = nil
+        if let terminationObserver { NSWorkspace.shared.notificationCenter.removeObserver(terminationObserver) }
+        terminationObserver = nil
+        overlay?.stop(); overlay = nil
+        bridge?.setRoutingEnabled(false); bridge?.stop(); bridge = nil
+        pushBridge?.stop(); pushBridge = nil
+        integration = nil; koala = nil
+        preparing = false; launching = false; recoveryTried = false
+        closeCards(); controllerChoice = selected
+        PickerLog.write("Selected controller: \(selected.rawValue)")
         start()
     }
     /// Quit: Koala first (it saves its song), then Koala Link.
@@ -102,6 +132,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
 
     // MARK: Start: the touch driver, the MPC's controls, then Koala
     private func start() {
+        guard let controllerChoice else { chooseController(); return }
         guard koala == nil, !preparing, !launching else { return }
         retry?.invalidate(); retry = nil
         if NSRunningApplication.runningApplications(withBundleIdentifier: paperCutBundleID).contains(where: { !$0.isTerminated }) {
@@ -110,11 +141,14 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
             later(3)
             return
         }
+        if controllerChoice == .push2 { startPush(); return }
+        let generation = sessionGeneration
         preparing = true
         showCards()
         say("Starting the MPC Touch…")
         TouchService.prepare(mpcDisplayID: mpcScreen().flatMap(displayNumber), allowRecovery: !recoveryTried) { [weak self] result in
             guard let self else { return }
+            guard self.sessionGeneration == generation, self.controllerChoice == .mpcTouch else { return }
             self.recoveryTried = self.recoveryTried || result.recoveryAttempted
             self.say(result.message)
             guard result.ready, self.mpcScreen() != nil else {
@@ -130,6 +164,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
             do {
                 try bridge.start(onReady: { [weak self] in
                     guard let self else { return }
+                    guard self.sessionGeneration == generation, self.controllerChoice == .mpcTouch else { return }
                     self.preparing = false
                     self.launchKoala()
                 })
@@ -150,6 +185,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         guard koala == nil, !launching else { return }
         guard let screen = mpcScreen(), let bridge else { later(2); return }
         launching = true
+        let generation = sessionGeneration
         if !NSRunningApplication.runningApplications(withBundleIdentifier: koalaBundleID).contains(where: { !$0.isTerminated }) {
             bridge.prepareForKoalaLaunch()
         }
@@ -160,6 +196,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         integration.open(on: screen) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
+                guard self.sessionGeneration == generation, self.controllerChoice == .mpcTouch else { return }
                 self.launching = false
                 switch result {
                 case .success(let app): self.started(app)
@@ -185,12 +222,47 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func startPush() {
+        preparing = true; closeCards()
+        let generation = sessionGeneration
+        let push = pushBridge ?? PushKoalaBridge(); pushBridge = push
+        push.onStatus = { [weak self] text in
+            guard let self, self.sessionGeneration == generation else { return }
+            self.say(text)
+        }
+        push.onChooseController = { [weak self] in self?.chooseController() }
+        push.onQuit = { [weak self] in self?.quit() }
+        push.onReady = { [weak self] in
+            guard let self, self.sessionGeneration == generation, self.controllerChoice == .push2 else { return }
+            self.preparing = false; self.launchPushKoala()
+        }
+        do { try push.start(); preparing = false }
+        catch { preparing = false; push.stop(); pushBridge = nil; say(error.localizedDescription); later(3) }
+    }
+    private func launchPushKoala() {
+        guard koala == nil, !launching, let screen = NSScreen.screens.first, let pushBridge else { return }
+        launching = true; let generation = sessionGeneration
+        pushBridge.prepareForKoalaLaunch()
+        let integration = KoalaIntegration(); self.integration = integration
+        integration.onStatus = { [weak self] text in
+            guard let self, self.sessionGeneration == generation else { return }; self.say(text)
+        }
+        integration.open(on: screen, accessibilityOptional: true, placeWindow: false) { [weak self] result in
+            guard let self, self.sessionGeneration == generation, self.controllerChoice == .push2 else { return }
+            self.launching = false
+            switch result {
+            case .success(let app): self.started(app)
+            case .failure(let error): self.say(error.localizedDescription)
+            }
+        }
+    }
+
     // MARK: Koala running
     private func started(_ app: NSRunningApplication) {
         closeCards()
         koala = app
         app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
-        if let screen = mpcScreen(), let bridge {
+        if controllerChoice == .mpcTouch, let screen = mpcScreen(), let bridge {
             let overlay = KoalaTouchOverlay()
             overlay.onBankSelected = { [weak bridge] bank in bridge?.selectPadBank(bank) }
             overlay.onKeyboardToggled = { [weak bridge] in bridge?.keyboardToggledOnScreen() }
@@ -201,7 +273,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
             self.overlay = overlay
             overlay.start(application: app, screen: screen, bank: bridge.currentPadBank, chopperMode: bridge.currentChopperMode)
         }
-        say("Koala is running on the MPC Touch")
+        say(controllerChoice == .push2 ? "Koala is running with Push 2" : "Koala is running on the MPC Touch")
         let pid = app.processIdentifier
         terminationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didTerminateApplicationNotification,
                                                                                 object: nil, queue: .main) { [weak self] note in
@@ -225,12 +297,14 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         bridge?.onPadBankChanged = nil
         bridge?.onChopperModeChanged = nil
         bridge?.setRoutingEnabled(false)
+        pushBridge?.stop(); pushBridge = nil
         integration = nil
         PickerLog.write("Koala has quit")
         NSApp.terminate(nil)
     }
 
     private func screensChanged() {
+        guard controllerChoice == .mpcTouch else { return }
         if koala != nil { overlay?.screenChanged(mpcScreen()); return }
         if !preparing && !launching { start() }
     }

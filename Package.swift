@@ -7,9 +7,11 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [.executable(name: "KoalaTouch", targets: ["KoalaTouch"])],
     targets: [
+        .target(name: "Push2Display", path: "Sources/Push2Display", publicHeadersPath: "include",
+                linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("CoreFoundation")]),
         .target(name: "MPCControllerSetup", path: "Sources/MPCControllerSetup", publicHeadersPath: "include",
                 linkerSettings: [.linkedFramework("CoreMIDI"), .linkedFramework("CoreFoundation")]),
-        .executableTarget(name: "KoalaTouch", dependencies: ["MPCControllerSetup"], path: "Sources/KoalaTouch",
+        .executableTarget(name: "KoalaTouch", dependencies: ["MPCControllerSetup", "Push2Display"], path: "Sources/KoalaTouch",
                           resources: [.copy("Resources/Fonts")],
                           linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("ApplicationServices")])
     ]
