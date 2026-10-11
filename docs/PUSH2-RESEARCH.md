@@ -6,6 +6,10 @@ Research and proposed next phase, 2026-10-11. Push 2 support is planned and not 
 
 The user wants custom Koala screens arranged for the Push 2 display and its physical controls, following the approach used in Paper Cut. The 64 pads, buttons, encoder turns and touches, touch strip and lights should form a coherent Koala instrument.
 
+The user clarified on 2026-10-11 that the Push screens should look similar to, or almost the same as, Koala itself. Use Koala's dark background, cyan and pink accents, waveform treatment, button shapes, labels and active-state cues as the visual reference. Paper Cut supplies reusable hardware transport and rendering structure; the Push interface needs Koala's visual design.
+
+Push 2's 960×160 display has a different shape from Koala's full application window. Adapt each Koala page to the wide strip, keeping its recognizable controls and visual language. This is a custom controller interface, not a full-window screen mirror. The screen is not touch-enabled; align its displayed actions with Push's physical buttons and encoders.
+
 The user confirmed that installed **Koala Touch 1.2.1, build 6** works as wanted on 2026-10-11. This product is now named **Koala Link**. Its MIDI mapping, Chopper behavior, FULL LEVEL control and accepted touch-driver binary are the reference for the Push adaptation. See [MIDI mapping](MIDI-MAPPING.md) for the existing routing rules. This phase concerns the standalone Koala Link repository.
 
 ## Primary GitHub references
