@@ -3,7 +3,7 @@
 ## Physical pad order
 
 Pads are numbered left to right, starting at the bottom row. The hardware pad
-IDs stay the same when a bank changes; Koala Touch assigns the bank in software.
+IDs stay the same when a bank changes; Koala Link assigns the bank in software.
 Pad strikes arrive on the Public endpoint, channel 10. Translated pad notes and
 polyphonic pressure go to Koala on channel 16.
 
@@ -28,10 +28,10 @@ polyphonic pressure go to Koala on channel 16.
 
 Banks B, C and D add 16, 32 and 48 to the bank A translated note. Koala displays
 MIDI 60 as C3. The displayed octave varies between applications; the MIDI
-number is the unambiguous value. The user confirmed that MIDI 60 plays chop 1
-with a 128-chop sample on 2026-10-11. Starting at C−1 (MIDI 12) can appear
-correct with 16 chops because the lower notes wrap, but shifts the first pad
-at other chop counts.
+number is the unambiguous value. The user confirmed on 2026-10-11 that MIDI 60
+is chop 1. Notes 60–123 address chops 1–64 in order regardless of chop count;
+smaller or odd counts wrap over
+the available slices. C−1 (MIDI 12) is not the first chop.
 
 The pad ID table was inherited from the existing MPC integration. A physical
 MPC Touch trace on 2026-10-11 independently confirmed pad 1 as raw 37 and pad 9
@@ -48,9 +48,10 @@ pad or every control has been independently checked on the device.
 - The restored song's keyboard mode is read before Koala launches. Native
   Sequence keyboard-button taps update the bridge without sending a second
   toggle.
-- The four banks play chops 1–64 when the sample has at least 64 slices.
+- The four banks map to chops 1–64 regardless of the sample's chop count.
   Increasing Koala's chop count to 128 does not add another four hardware
-  banks to this profile.
+  banks to this profile. Chops 65–128 need a second page; its assignments must
+  stay within MIDI 0–127 and be confirmed live in Koala.
 
 Koala controls the chop count and the selected sample's Chopper behavior.
 Use **CHOP: NOTE** for note selection. The bridge does not alter slice markers
@@ -63,6 +64,7 @@ to chop 1; with 26, bank B pad 10 is chop 26 and pad 11 returns to chop 1.
 | Control | Hardware input | Translated output / behavior |
 | --- | --- | --- |
 | Pad banks A–D | Ch1 notes 35–38 | Select software bank; no musical note |
+| FULL LEVEL | Public Ch1 note 39 | Toggle pad strike velocity 127 / measured velocity; light follows state; no musical note |
 | 16 LEVELS | Public Ch1 note 40 | Ch15 note 40; toggle keyboard and bridge mode once |
 | Q-Link bank selector | Ch1 note 0 | Cycle four Q-Link banks; no musical note |
 | Q-Link knobs 1–4 | Ch1 CC16–19 | Ch15 CC1–4, 5–8, 9–12 or 13–16 |
@@ -77,19 +79,23 @@ control an automatic Koala assignment.
 
 Public and Private endpoints have independent MIDI decoders and held state.
 Mirrored selectors and known function buttons are combined so one physical
-press has one action. 16 LEVELS uses Public only, including its release; delayed
-Private copies cannot toggle the keyboard a second time. Native keyboard
-clicks are tracked through release, with one update per completed click.
+press has one action. FULL LEVEL and 16 LEVELS use Public only, including their
+releases; delayed Private copies cannot toggle either mode a second time. FULL
+LEVEL changes only pad note-on velocity: held note assignments, pressure and
+releases retain their original behavior. MIDI and keyboard velocity are enabled
+in Koala so its sample and Chopper modes honor the routed strike velocity.
+Native keyboard clicks are tracked through release, with one update per
+completed click.
 Private musical pad messages are ignored. A Private
 pad release cannot end a Public pad strike.
 
 ## Saved mappings
 
-Koala Touch maintains its canonical mappings while Koala is closed and saves
+Koala Link maintains its canonical mappings while Koala is closed and saves
 a backup before writing. Duplicate assignments to an owned address or MIDI
 key are repaired. MIDI Learn can also receive the MPC's raw port; relearning
 automatic controls can replace the translated assignments. Quit and reopen
-Koala Touch to restore them. Song-specific MIDI maps can override the global
+Koala Link to restore them. Song-specific MIDI maps can override the global
 map and must be reviewed separately if a particular song behaves differently.
 
 ## Protocol reference
@@ -97,5 +103,5 @@ map and must be reviewed separately if a particular song behaves differently.
 [MPC-LiveXplore](https://github.com/TheKikGen/MPC-LiveXplore) documents related
 Akai controller protocols. Similar button and LED families are useful
 references, but model IDs and commands must be checked for the MPC Touch.
-Koala Touch uses its existing accepted Touch setup sequence; it does not send
+Koala Link uses its existing accepted Touch setup sequence; it does not send
 experimental initialization or firmware commands.

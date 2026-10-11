@@ -1,5 +1,7 @@
-# Koala Touch working instructions
+# Koala Link working instructions
 
+- Before adapting another controller, read `.agents/learnings.md` and `docs/PUSH2-RESEARCH.md`; preserve the confirmed Koala behavior documented in `docs/MIDI-MAPPING.md`.
+- The product is Koala Link. Retain the legacy bundle/package IDs, executable name and settings receipt/support paths for upgrades; the shared touch service keeps its existing identity.
 - Build the app with `build-app.sh` and the installer with `installer/build-installer.sh`.
 - The touch driver is shared with Paper Cut. Never remove it while the other app is installed.
 - Change, rebuild or re-sign `TouchDriver/mpc_touchd` only when the user asks. Ad-hoc rebuilds require Accessibility approval again.

@@ -1,7 +1,7 @@
 #!/bin/zsh
 set -euo pipefail
 
-# Builds Koala Touch.app: Koala Sampler on the Akai MPC Touch. Inside:
+# Builds Koala Link.app: Koala Sampler on the Akai MPC Touch. Inside:
 # - the app and its icon;
 # - Alicja Hand (its starting card and bank overlay);
 # - the MPC Touch's touch driver v3 and tools, exactly as built and signed in outputs/ (the same files Paper Cut ships;
@@ -10,8 +10,8 @@ set -euo pipefail
 # The bundle is assembled in build/.staging and swapped in at the end.
 HERE="${0:A:h}"
 PROJECT="$HERE"
-VERSION=1.2
-BUILD=5
+VERSION=1.3.0
+BUILD=7
 cd "$HERE"
 mkdir -p "$HERE/Sources/KoalaTouch/Resources/Fonts"
 cp "$PROJECT/brand/font/"AlicjaHand-*.otf "$HERE/Sources/KoalaTouch/Resources/Fonts/"
@@ -20,7 +20,7 @@ CLANG_MODULE_CACHE_PATH="$HERE/.clang-cache" SWIFTPM_MODULECACHE_OVERRIDE="$HERE
   swift build --disable-sandbox -c release
 BIN="$HERE/.build/release/KoalaTouch"
 
-STAGE="$HERE/build/.staging/Koala Touch.app"
+STAGE="$HERE/build/.staging/Koala Link.app"
 rm -rf "$HERE/build/.staging"
 CONTENTS="$STAGE/Contents"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources/Fonts" "$CONTENTS/Resources/TouchDriver"
@@ -41,9 +41,10 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>CFBundleExecutable</key><string>KoalaTouch</string>
+  <!-- Keep the installed identity stable across the Koala Link rename. -->
   <key>CFBundleIdentifier</key><string>com.savilion.koala-touch</string>
-  <key>CFBundleName</key><string>Koala Touch</string>
-  <key>CFBundleDisplayName</key><string>Koala Touch</string>
+  <key>CFBundleName</key><string>Koala Link</string>
+  <key>CFBundleDisplayName</key><string>Koala Link</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD</string>
@@ -56,7 +57,7 @@ PLIST
 # Sign the driver files as they are (already signed) and the app ad hoc; never re-sign mpc_touchd.
 codesign --force --sign - --identifier com.savilion.koala-touch "$STAGE"
 codesign --verify --strict "$STAGE"
-rm -rf "$HERE/build/Koala Touch.app"
-mv "$STAGE" "$HERE/build/Koala Touch.app"
+rm -rf "$HERE/build/Koala Link.app"
+mv "$STAGE" "$HERE/build/Koala Link.app"
 rm -rf "$HERE/build/.staging"
-echo "Built $HERE/build/Koala Touch.app ($VERSION, build $BUILD)"
+echo "Built $HERE/build/Koala Link.app ($VERSION, build $BUILD)"

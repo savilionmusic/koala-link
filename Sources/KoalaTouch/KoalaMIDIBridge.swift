@@ -129,9 +129,9 @@ final class KoalaMIDIBridge {
                 else { readyHandlers.append(onReady) }
             }
             guard !isStarted else { return }
-            let clientStatus = MIDIClientCreate("Koala Touch" as CFString, nil, nil, &client)
+            let clientStatus = MIDIClientCreate("Koala Link" as CFString, nil, nil, &client)
             guard clientStatus == noErr else { throw Self.error("MIDIClientCreate", clientStatus) }
-            let inputStatus = MIDIInputPortCreateWithBlock(client, "Koala Touch Input" as CFString, &inputPort) { packetList, ref in
+            let inputStatus = MIDIInputPortCreateWithBlock(client, "Koala Link Input" as CFString, &inputPort) { packetList, ref in
                 guard let ref else { return }
                 let connection = Unmanaged<Connection>.fromOpaque(ref).takeUnretainedValue()
                 guard let owner = connection.owner else { return }
@@ -147,7 +147,7 @@ final class KoalaMIDIBridge {
                 }
             }
             guard inputStatus == noErr else { disposeMIDI(); throw Self.error("MIDIInputPortCreate", inputStatus) }
-            let sourceStatus = MIDISourceCreate(client, "Koala Touch" as CFString, &virtualSource)
+            let sourceStatus = MIDISourceCreate(client, "Koala Link" as CFString, &virtualSource)
             guard sourceStatus == noErr else { disposeMIDI(); throw Self.error("MIDISourceCreate", sourceStatus) }
             isStarted = true
             refreshConnections()
@@ -222,13 +222,16 @@ final class KoalaMIDIBridge {
             let generation = setupGeneration
             controllerQueue.asyncAfter(deadline: .now() + 0.4) { [weak self] in
                 guard let self else { return }
-                let banks: (Int, Int, Bool)? = self.queue.sync {
+                let banks: (Int, Int, Bool, Bool)? = self.queue.sync {
                     guard self.isStarted, self.setupGeneration == generation, !self.connections.isEmpty else { return nil }
-                    return (self.router.padBank, self.router.qlinkBank, self.router.chopperMode)
+                    return (self.router.padBank, self.router.qlinkBank, self.router.chopperMode, self.router.fullLevel)
                 }
                 guard let banks else { return }
                 let sent = controller_initialize(Int32(banks.0), Int32(banks.1)) == 0
-                if sent { _ = controller_set_button_light(0x28, banks.2 ? 2 : 0) }
+                if sent {
+                    _ = controller_set_button_light(0x28, banks.2 ? 2 : 0)
+                    _ = controller_set_button_light(0x27, banks.3 ? 2 : 0)
+                }
                 self.queue.async {
                     guard self.isStarted, self.setupGeneration == generation else { return }
                     self.controllerReady = sent; self.controllerSetupPending = false
@@ -237,7 +240,7 @@ final class KoalaMIDIBridge {
                         let callbacks = self.readyHandlers; self.readyHandlers.removeAll()
                         DispatchQueue.main.async { callbacks.forEach { $0() } }
                         // A selector can change while the paced initialization runs.
-                        if banks.0 != self.router.padBank || banks.1 != self.router.qlinkBank || banks.2 != self.router.chopperMode { self.updateBankLEDs() }
+                        if banks.0 != self.router.padBank || banks.1 != self.router.qlinkBank || banks.2 != self.router.chopperMode || banks.3 != self.router.fullLevel { self.updateBankLEDs() }
                     }
                 }
             }
@@ -286,6 +289,10 @@ final class KoalaMIDIBridge {
                 updateBankLEDs()
                 status(enabled ? "16 Levels · Chopper · banks A–D play chops 1–64, MIDI notes 60–123" : "16 Levels off · sample pads restored")
                 if routingEnabled { DispatchQueue.main.async { [weak self] in self?.onChopperModeChanged?(enabled) } }
+            case .fullLevel(let enabled):
+                updateBankLEDs()
+                status(enabled ? "FULL LEVEL on · pad velocity 127" : "FULL LEVEL off · natural pad velocity")
+                PickerLog.write("FULL LEVEL \(enabled ? "on · velocity 127" : "off · natural velocity")")
             case .qlinkBank(let bank):
                 updateBankLEDs()
                 PickerLog.write("MPC Q-Link bank \(String(UnicodeScalar(65 + bank)!)) · Ch15 CC\(bank * 4 + 1)–\(bank * 4 + 4)")
@@ -299,17 +306,18 @@ final class KoalaMIDIBridge {
         let generation = setupGeneration
         controllerQueue.async { [weak self] in
             guard let self else { return }
-            let banks: (Int, Int, Bool)? = self.queue.sync {
+            let banks: (Int, Int, Bool, Bool)? = self.queue.sync {
                 guard self.isStarted, self.setupGeneration == generation else { return nil }
-                return (self.router.padBank, self.router.qlinkBank, self.router.chopperMode)
+                return (self.router.padBank, self.router.qlinkBank, self.router.chopperMode, self.router.fullLevel)
             }
             guard let banks else { return }
             _ = controller_refresh_banks(Int32(banks.0), Int32(banks.1))
             _ = controller_set_button_light(0x28, banks.2 ? 2 : 0)
+            _ = controller_set_button_light(0x27, banks.3 ? 2 : 0)
             self.queue.async {
                 guard self.isStarted, self.setupGeneration == generation else { return }
                 self.ledRefreshPending = false
-                if banks.0 != self.router.padBank || banks.1 != self.router.qlinkBank || banks.2 != self.router.chopperMode { self.updateBankLEDs() }
+                if banks.0 != self.router.padBank || banks.1 != self.router.qlinkBank || banks.2 != self.router.chopperMode || banks.3 != self.router.fullLevel { self.updateBankLEDs() }
             }
         }
     }

@@ -1,7 +1,7 @@
 import AppKit
 import CoreText
 
-/// Koala Touch's own screens (the starting card and the bank overlay) in the Paper look: Paper Cut's pen-and-paper
+/// Koala Link's own screens (the starting card and the bank overlay) in the Paper look: Paper Cut's pen-and-paper
 /// palette and Alicja Hand (copied from Paper Picker's PaperArtwork.swift).
 enum PickerPaper {
     static let paper = NSColor(calibratedRed: 0.962, green: 0.948, blue: 0.918, alpha: 1)
@@ -95,14 +95,14 @@ final class PaperBackgroundView: NSView {
     override func draw(_ dirtyRect: NSRect) { PickerPaper.background(bounds) }
 }
 
-/// Koala Touch's log: ~/Library/Logs/Koala Touch.log.
+/// Koala Link's log: ~/Library/Logs/Koala Link.log.
 enum PickerLog {
     private static let queue = DispatchQueue(label: "KoalaTouch.Log")
     static func write(_ message: String) {
         queue.async {
             let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs")
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let url = folder.appendingPathComponent("Koala Touch.log")
+            let url = folder.appendingPathComponent("Koala Link.log")
             let data = Data("\(ISO8601DateFormatter().string(from: Date())) \(message)\n".utf8)
             if !FileManager.default.fileExists(atPath: url.path) { try? data.write(to: url); return }
             guard let file = try? FileHandle(forWritingTo: url) else { return }
@@ -142,7 +142,7 @@ enum KoalaTouchArtwork {
             }
             return true
         } catch {
-            fputs("Koala Touch: \(error.localizedDescription)\n", stderr)
+            fputs("Koala Link: \(error.localizedDescription)\n", stderr)
             exit(1)
         }
     }
@@ -227,7 +227,7 @@ enum KoalaTouchArtwork {
     }
 }
 
-/// The card on the MPC's screen (and the Mac's) while Koala Touch gets the MPC ready and opens Koala.
+/// The card on the MPC's screen (and the Mac's) while Koala Link gets the MPC ready and opens Koala.
 final class KoalaTouchCard: NSView {
     var status = "" { didSet { needsDisplay = true } }
     override var isOpaque: Bool { true }
@@ -239,7 +239,7 @@ final class KoalaTouchCard: NSView {
             (t as NSString).draw(in: NSRect(x: 40 * s, y: y * s, width: bounds.width - 80 * s, height: size * 1.8 * s),
                                  withAttributes: [.font: PickerPaper.font(size: size * s, weight: weight), .foregroundColor: color, .paragraphStyle: style])
         }
-        text("KOALA TOUCH", y: 470, size: 64, weight: .bold, color: PickerPaper.ink)
+        text("KOALA LINK", y: 470, size: 64, weight: .bold, color: PickerPaper.ink)
         PickerPaper.line(NSPoint(x: bounds.midX - 190 * s, y: 462 * s), NSPoint(x: bounds.midX + 190 * s, y: 463 * s), seed: 3, width: 2.4 * s, color: PickerPaper.accent)
         text("Koala Sampler on the MPC Touch", y: 380, size: 24, weight: .regular, color: PickerPaper.mutedInk)
         text(status, y: 250, size: 20, weight: .regular, color: PickerPaper.mutedInk)

@@ -1,6 +1,6 @@
 import AppKit
 
-// Koala's MIDI map and MIDI settings for Koala Touch (copied from Paper Picker 1.14, where it also served the Push): the
+// Koala's MIDI map and MIDI settings for Koala Link (copied from Paper Picker 1.14, where it also served the Push): the
 // keys the MPC's bridge sends are written into Koala's map, and Koala's MIDI settings are set, while Koala is closed.
 
 /// One key in Koala's MIDI map (midiMapping.json): channel 1–16 (0 = any), "note" or "cc", number.
@@ -111,10 +111,12 @@ enum KoalaPushProfile {
     /// Koala's MIDI settings the Push and the MPC need (tested on Koala, 2026-10-03): MIDI mapping on, the pads and the
     /// keyboard on channel 16 (keyboard keys only play on Koala's keyboard channel), "MIDI can select pads" off (on, pad
     /// hits moved keyboard mode to other pads), snap to scale off (it scrambled chops), Koala's built-in device maps off.
+    /// Velocity stays enabled in sample and keyboard modes; FULL LEVEL controls the pad strike velocity in the bridge.
     static let requiredSettings: [(key: String, value: Any)] = [
         ("useMidiMapping", true), ("midiInputChannel", 16), ("keyboardMidiChannel", 16), ("midiNoteOffset", 36),
-        // Built-in device maps off: Koala Touch has no SP-404MKII link (that was Paper Picker's parked Push work).
+        // Built-in device maps off: Koala Link has no SP-404MKII link (that was Paper Picker's parked Push work).
         ("midiCanSelectNotes", false), ("keyboardMidiSnapToScale", false), ("builtInMidiMappingsEnabled", false),
+        ("enableMidiVelocity", true), ("keyboardVelocityEnabled", true),
     ]
     /// At every launch (Koala closed): `requiredSettings` written into defaults.json where they differ; the rest kept.
     /// Returns the settings changed (empty: nothing to do).
@@ -123,7 +125,7 @@ enum KoalaPushProfile {
         let fm = FileManager.default
         let url = settings.appendingPathComponent("defaults.json")
         guard let old = try? Data(contentsOf: url), var d = try JSONSerialization.jsonObject(with: old) as? [String: Any] else { return nil }
-        guard !isRunning() else { throw failure("Save and quit Koala before Koala Touch sets its MIDI settings.") }
+        guard !isRunning() else { throw failure("Save and quit Koala before Koala Link sets its MIDI settings.") }
         var changed: [String] = []
         for (key, value) in requiredSettings {
             let same: Bool
@@ -164,7 +166,7 @@ enum KoalaPushProfile {
         let fm = FileManager.default
         let mappingURL = settings.appendingPathComponent("midiMapping.json")
         guard let old = try? Data(contentsOf: mappingURL), var root = try JSONSerialization.jsonObject(with: old) as? [String: Any] else { return nil }
-        guard !isRunning() else { throw failure("Save and quit Koala before Koala Touch checks its MIDI map.") }
+        guard !isRunning() else { throw failure("Save and quit Koala before Koala Link checks its MIDI map.") }
         var list = root["mappings"] as? [[String: Any]] ?? []
         var repaired: [String] = []
         for (address, wanted) in canonicalMap {
@@ -242,7 +244,7 @@ enum KoalaPushProfile {
         try JSONSerialization.data(withJSONObject: ["midiCanSelectNotes": true, "keyboardMidiSnapToScale": true, "keyboardMidiChannel": 13,
                                                     "audioOutput": "keep-me"]).write(to: defaultsURL)
         do { _ = try enforceSettings(settings: settings, isRunning: { true }); return false } catch {}
-        guard let set = try enforceSettings(settings: settings, isRunning: { false }), set.count == 7, !canSelectPads(settings),
+        guard let set = try enforceSettings(settings: settings, isRunning: { false }), set.count == 9, !canSelectPads(settings),
               keyboardSettings(settings) == (16, 36, 16),
               let ds = try JSONSerialization.jsonObject(with: Data(contentsOf: defaultsURL)) as? [String: Any],
               ds["keyboardMidiSnapToScale"] as? Bool == false, ds["useMidiMapping"] as? Bool == true, ds["builtInMidiMappingsEnabled"] as? Bool == false, ds["audioOutput"] as? String == "keep-me",

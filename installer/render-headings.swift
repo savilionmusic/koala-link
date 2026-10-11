@@ -12,10 +12,10 @@ try FileManager.default.createDirectory(at: output, withIntermediateDirectories:
 let url = fonts.appendingPathComponent("AlicjaHand-Bold.otf")
 guard CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil) else { fatalError("Cannot register Alicja Hand Bold") }
 let headings: [(String, String, CGFloat)] = [
-    ("welcome", "Koala Touch", 26),
+    ("welcome", "Koala Link", 26),
     ("readme-how", "How it works", 18),
     ("readme-requirements", "Requirements", 18),
-    ("conclusion", "Koala Touch is installed", 24)
+    ("conclusion", "Koala Link is installed", 24)
 ]
 for (name, value, size) in headings {
     let font = NSFont(name: "AlicjaHand-Bold", size: size * 1.2)!

@@ -5,7 +5,7 @@ import Foundation
 /// bank at note-on and keeps that assignment until note-off.
 struct KoalaControlRouter {
     enum Role { case publicControl, privateSelector }
-    enum Event: Equatable { case midi([UInt8]), padBank(Int), qlinkBank(Int), chopperMode(Bool) }
+    enum Event: Equatable { case midi([UInt8]), padBank(Int), qlinkBank(Int), chopperMode(Bool), fullLevel(Bool) }
 
     private struct Stream {
         var status: UInt8 = 0
@@ -47,6 +47,7 @@ struct KoalaControlRouter {
     private(set) var padBank = 0
     private(set) var qlinkBank = 0
     private(set) var chopperMode = false
+    private(set) var fullLevel = false
     private var sampleBank = 0
 
     mutating func selectPadBank(_ bank: Int) -> [Event] {
@@ -99,9 +100,21 @@ struct KoalaControlRouter {
         let down = kind == 0x90 && value > 0
         let up = kind == 0x80 || (kind == 0x90 && value == 0)
 
-        // Public is the measured source for 16 LEVELS. A delayed Private copy
-        // must not become a second keyboard toggle after Public has released.
-        if role == .privateSelector, channel == 0, number == 0x28, down || up { return [] }
+        // Public owns the two latched level buttons. Delayed Private copies
+        // must not toggle either state again after Public has released.
+        if role == .privateSelector, channel == 0, [UInt8(0x27), 0x28].contains(number), down || up { return [] }
+
+        // FULL LEVEL is local velocity control, not a MIDI Learn note. Track
+        // its press through release so holding it cannot repeatedly toggle.
+        if channel == 0, number == 0x27, down || up {
+            let wasDown = streams.values.contains { $0.buttons.contains(number) }
+            if down { streams[source]?.buttons.insert(number) }
+            else { streams[source]?.buttons.remove(number) }
+            let isDown = streams.values.contains { $0.buttons.contains(number) }
+            guard routing, isDown, !wasDown else { return [] }
+            fullLevel.toggle()
+            return [.fullLevel(fullLevel)]
+        }
 
         if channel == 0, (down || up), number == 0 || (0x23...0x26).contains(number) {
             let wasDown = streams.values.contains { $0.selectors.contains(number) }
@@ -118,7 +131,7 @@ struct KoalaControlRouter {
         // Paper Cut's measured transport/function buttons can arrive on either
         // port. Match combined held state, rather than an arbitrary time limit.
         if channel == 0, (down || up),
-           [UInt8(0x31), 0x49, 0x51, 0x52, 0x53, 0x6F, 0x27, 0x28, 0x35, 0x0B, 0x09].contains(number) {
+           [UInt8(0x31), 0x49, 0x51, 0x52, 0x53, 0x6F, 0x28, 0x35, 0x0B, 0x09].contains(number) {
             let wasDown = streams.values.contains { $0.buttons.contains(number) }
             if down { streams[source]?.buttons.insert(number) }
             else { streams[source]?.buttons.remove(number) }
@@ -138,7 +151,7 @@ struct KoalaControlRouter {
         // musical input. In particular, a Private pad-off cannot release Public.
         guard role == .publicControl, routing else { return [] }
         if channel == 9, KoalaPadMapper.physicalPadOrder.contains(number) {
-            if down, let note = pads.noteOn(number, bank: padBank, chopperMode: chopperMode) { return [.midi([0x9F, note, value])] }
+            if down, let note = pads.noteOn(number, bank: padBank, chopperMode: chopperMode) { return [.midi([0x9F, note, fullLevel ? 127 : value])] }
             if up, let note = pads.noteOff(number) { return [.midi([0x8F, note, value])] }
             if kind == 0xA0, let note = pads.mappedHeldNote(for: number) { return [.midi([0xAF, note, value])] }
             return []

@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Removes Koala Touch. The MPC Touch's touch driver and flight recorder are shared with Paper Cut: they are removed too,
+# Removes Koala Link. The MPC Touch's touch driver and flight recorder are shared with Paper Cut: they are removed too,
 # unless Paper Cut is still installed. Koala, its songs and settings are not touched.
 ME=$(id -u)
 osascript -e 'tell application id "com.savilion.koala-touch" to quit' >/dev/null 2>&1
@@ -14,6 +14,6 @@ else
   echo "The touch driver stays: Paper Cut uses it."
 fi
 echo "Removing the app needs your Mac password:"
-sudo rm -rf "/Applications/Koala Touch.app" "/Library/Application Support/Koala Touch"
+sudo rm -rf "/Applications/Koala Link.app" "/Applications/Koala Touch.app" "/Library/Application Support/Koala Touch"
 sudo pkgutil --forget com.savilion.koalatouch >/dev/null 2>&1
-echo "Koala Touch is removed. Koala and your songs were not touched."
+echo "Koala Link is removed. Koala and your songs were not touched."

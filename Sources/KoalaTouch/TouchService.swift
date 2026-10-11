@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 /// The MPC Touch's touch driver (mpc_touchd, LaunchAgent com.savilion.mpc-touchd), shared with Paper Cut: installed for
-/// this user from Koala Touch's own copy if it isn't there yet, then started or restarted. This never opens the SiS USB
+/// this user from Koala Link's own copy if it isn't there yet, then started or restarted. This never opens the SiS USB
 /// device or sends the MPC's display-on MIDI command.
 enum TouchService {
     private static let label = "com.savilion.mpc-touchd"
@@ -30,8 +30,8 @@ enum TouchService {
             guard allowRecovery else {
                 return Result(ready: false, message: "The touch driver isn't installed yet.", recoveryAttempted: false)
             }
-            // Not installed (Koala Touch's installer leaves it until an MPC Touch is connected): install it now, for this
-            // user only, from the copy inside Koala Touch. A new driver needs the Accessibility permission once.
+            // Not installed (Koala Link's installer leaves it until an MPC Touch is connected): install it now, for this
+            // user only, from the copy inside Koala Link. A new driver needs the Accessibility permission once.
             let installed = installDriver()
             if !installed.ok {
                 return Result(ready: false, message: "The touch driver couldn't be installed: \(installed.output)", recoveryAttempted: true)
@@ -40,7 +40,7 @@ enum TouchService {
                 DispatchQueue.main.async {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
                 }
-                return Result(ready: false, message: "Touch driver installed. Allow mpc_touchd in Privacy & Security › Accessibility; Koala Touch carries on by itself.", recoveryAttempted: true)
+                return Result(ready: false, message: "Touch driver installed. Allow mpc_touchd in Privacy & Security › Accessibility; Koala Link carries on by itself.", recoveryAttempted: true)
             }
         }
 
@@ -82,17 +82,17 @@ enum TouchService {
         }
         let message = mpcDisplayID != nil
             ? "The touch driver is running, but the MPC's screen isn't mapped yet (waiting for it)…"
-            : "The MPC Touch's screen isn't there yet (DisplayLink). Koala Touch carries on when macOS sees it."
+            : "The MPC Touch's screen isn't there yet (DisplayLink). Koala Link carries on when macOS sees it."
         return Result(ready: false, message: message, recoveryAttempted: attempted)
     }
 
-    /// Runs Koala Touch's bundled install-for-user.sh with its bundled TouchDriver folder (the same files Paper Cut's
+    /// Runs Koala Link's bundled install-for-user.sh with its bundled TouchDriver folder (the same files Paper Cut's
     /// installer uses). Exit 0 = already up to date, 10 = a new driver was installed.
     private static func installDriver() -> (ok: Bool, new: Bool, output: String) {
         guard let script = Bundle.main.url(forResource: "install-for-user", withExtension: "sh"),
               let source = Bundle.main.resourceURL?.appendingPathComponent("TouchDriver"),
               FileManager.default.fileExists(atPath: source.appendingPathComponent(driverName).path) else {
-            return (false, false, "Koala Touch's copy of the driver is missing; reinstall Koala Touch.")
+            return (false, false, "Koala Link's copy of the driver is missing; reinstall Koala Link.")
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")

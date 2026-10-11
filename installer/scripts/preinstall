@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Koala Touch installer, before the files are copied: quit Koala Touch if it is running (it closes Koala, which saves).
+# Koala Link installer, before the files are copied: quit Koala Link if it is running (it closes Koala, which saves).
 USER_NAME=$(/usr/bin/stat -f %Su /dev/console)
 if [[ -n "$USER_NAME" && "$USER_NAME" != root && "$USER_NAME" != loginwindow ]]; then
   USER_ID=$(/usr/bin/id -u "$USER_NAME")
@@ -7,4 +7,8 @@ if [[ -n "$USER_NAME" && "$USER_NAME" != root && "$USER_NAME" != loginwindow ]];
     -e 'tell application id "com.savilion.koala-touch" to quit' >/dev/null 2>&1
 fi
 for i in {1..20}; do /usr/bin/pgrep -x "KoalaTouch" >/dev/null || break; sleep 0.5; done
+if /usr/bin/pgrep -x "KoalaTouch" >/dev/null; then
+  echo "Close Koala Link or Koala Touch before updating. The running app was not replaced." >&2
+  exit 1
+fi
 exit 0

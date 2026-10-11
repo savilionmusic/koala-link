@@ -1,9 +1,10 @@
-# Koala Touch
+# Koala Link
 
 Use Koala Sampler on an Akai MPC Touch, with its screen, pads, banks, Q-Links
-and transport controls. Koala Touch is free to download and use.
+and transport controls. Koala Link is free to download and use. MPC Touch is
+the currently supported controller; Push 2 support is planned.
 
-**[Download the installer](https://github.com/savilionmusic/koala-touch/releases/latest)**
+**[Download the installer](https://github.com/savilionmusic/koala-link/releases/latest)**
 
 ## Requirements
 
@@ -14,9 +15,11 @@ and transport controls. Koala Touch is free to download and use.
 
 ## Install
 
-1. Download **Koala-Touch-Installer.pkg** from Releases and run it.
-2. Open Koala Touch from Applications with the MPC connected.
-3. Allow **Koala Touch** and **mpc_touchd** in System Settings → Privacy & Security → Accessibility when prompted.
+1. Download **Koala-Link-Installer.pkg** from Releases and run it.
+2. Open Koala Link from Applications with the MPC connected.
+3. Allow **Koala Link** and **mpc_touchd** in System Settings → Privacy & Security → Accessibility when prompted.
+
+Koala Link replaces Koala Touch and keeps your existing Koala MIDI settings.
 
 The app and installer use ad-hoc signing and are not notarized. If macOS blocks
 the download, use the Open Anyway control in Privacy & Security.
@@ -24,11 +27,18 @@ the download, use the Open Anyway control in Privacy & Security.
 ## Controls
 
 Koala fills the MPC screen. The four pad banks provide 64 sample pads;
-Q-Links, 16 LEVELS, REC and PLAY control Koala. Quitting Koala also quits Koala Touch.
+Q-Links, FULL LEVEL, 16 LEVELS, REC and PLAY control Koala. Quitting Koala
+also quits Koala Link.
+
+Press **FULL LEVEL** to toggle maximum pad velocity. With its light on, every
+physical pad strike sends velocity 127; with it off, strikes keep their measured
+velocity. This works across banks A–D in sample and Chopper modes. Koala Link
+enables Koala's MIDI and keyboard velocity settings for this control. FULL LEVEL
+starts off when Koala Link opens, and retains its state through an MPC reconnect.
 
 Press **16 LEVELS** to enter Chopper keyboard mode. Physical bank A pad 1
-plays **chop 1**. The pads send 64 chromatic notes starting at **MIDI note 60
-(Koala's C3)**, on channel 16:
+plays **chop 1**. Notes 60–123 address the first 64 chops in order, regardless
+of the sample's chop count, on channel 16:
 
 | Pad bank | Chops with at least 64 slices | MIDI notes |
 | --- | --- | --- |
@@ -42,17 +52,18 @@ each row from bottom to top. Bank changes address more chops in the selected
 sample. Entering Chopper mode starts at bank A; leaving restores the previous
 sample bank and sample-pad notes 36–99. The Chopper's own chop count and
 **CHOP: NOTE** setting control how it responds to the notes. With fewer chops,
-Koala wraps notes across the available slices. With 128 chops, these four banks
-play the first 64. C−1 is below Koala's Chopper root and can shift which chop a
-pad plays when the chop count changes.
-Koala Touch follows the keyboard state in Koala's restored song and native
+Koala wraps notes across the available slices, including smaller and odd chop
+counts. C−1 is not the first chop. With 128 chops, these four banks still play
+chops 1–64. Reaching chops 65–128 needs another page, with the MIDI note ceiling
+handled and the behavior confirmed live in Koala.
+Koala Link follows the keyboard state in Koala's restored song and native
 Sequence keyboard-button taps, as well as the physical **16 LEVELS** button.
 Held notes keep their original assignment until release, even if the bank or
 mode changes.
 
 The sample-pad map is maintained automatically at launch with backups. Koala's
 MIDI Learn also hears the hardware's raw port, so learning these same controls
-by hand can replace the translated mapping. Quit and reopen Koala Touch to
+by hand can replace the translated mapping. Quit and reopen Koala Link to
 restore its assignments. Q-Link bank A is mapped to start, length, volume and
 pitch. Banks B–D expose CC5–16 on channel 15 for custom MIDI Learn assignments.
 See [MIDI mapping](docs/MIDI-MAPPING.md) for the physical pad table and routing details.
@@ -71,8 +82,8 @@ Install Xcode Command Line Tools, then run:
 ./installer/build-installer.sh
 ```
 
-The app is written to `build/Koala Touch.app`; the installer is written to
-`dist/Koala-Touch-Installer.pkg`. Building does not install either one.
+The app is written to `build/Koala Link.app`; the installer is written to
+`dist/Koala-Link-Installer.pkg`. Building does not install either one.
 
 `TouchDriver/` contains the driver source and the accepted signed binaries
 used by the app. App builds copy those binaries without re-signing them.
@@ -89,4 +100,11 @@ service is shared with Paper Cut, and is retained when Paper Cut is installed.
 Created by Savilion. Alicja Hand handwriting font by Alicja Gajewski, included
 with redistribution permission confirmed by the publisher. See [NOTICE.md](NOTICE.md).
 
-Koala Touch is an independent companion app for Koala Sampler and the MPC Touch.
+Koala Link is an independent companion app for Koala Sampler and supported controllers.
+
+## More controllers
+
+Koala Link is the project name for future controller support. The next planned
+controller is Ableton Push 2, with custom screens and controls. See the
+[Push 2 research and adaptation plan](docs/PUSH2-RESEARCH.md), including the
+Koala Chopper rules that the new controller must preserve.

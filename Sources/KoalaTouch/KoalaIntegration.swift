@@ -65,7 +65,7 @@ final class KoalaIntegration {
             guard let self else { return }
             if let application {
                 guard self.placement else {
-                    self.onStatus?("Koala is open. For fullscreen, allow Koala Touch in Privacy & Security → Accessibility.")
+                    self.onStatus?("Koala is open. For fullscreen, allow Koala Link in Privacy & Security → Accessibility.")
                     completion(.success(application))
                     return
                 }
@@ -271,7 +271,7 @@ enum KoalaIntegrationError: LocalizedError {
         case .displayDisconnected:
             return "MPC Touch display disconnected. Reconnect it, then choose Koala again."
         case .accessibilityRequired:
-            return "Koala Touch needs Accessibility access to move Koala. Enable this app in System Settings → Privacy & Security → Accessibility, then choose Koala again."
+            return "Koala Link needs Accessibility access to move Koala. Enable this app in System Settings → Privacy & Security → Accessibility, then choose Koala again."
         case .windowUnavailable:
             return "Koala opened, but its window did not become available. Choose Koala again."
         case .windowPlacementFailed:

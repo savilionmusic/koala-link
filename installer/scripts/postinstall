@@ -1,11 +1,25 @@
 #!/bin/zsh
-# Koala Touch installer, after the files are copied (runs as root). If an MPC Touch is plugged in, set
+# Koala Link installer, after the files are copied (runs as root). If an MPC Touch is plugged in, set
 # up its touch-screen driver, flight recorder and tools for the logged-in user and open the
 # Accessibility settings when the driver is new. Without an MPC Touch nothing runs in the background:
-# the driver waits in /Library/Application Support/Koala Touch, and Koala Touch installs it
+# the driver waits in /Library/Application Support/Koala Touch, and Koala Link installs it
 # itself (for the logged-in user) when it first runs with an MPC Touch. The driver is the same one Paper Cut ships.
 LOG=/var/log/koala-touch-install.log
 SUPPORT="/Library/Application Support/Koala Touch"
+# Keep legacy support/receipt paths, and retire the old app only after the
+# renamed payload exists. Its saved copy is outside Applications and does not
+# have an .app extension, so Launch Services will not offer two app copies.
+TARGET_VOLUME="${3:-/}"
+OLD_APP="$TARGET_VOLUME/Applications/Koala Touch.app"
+NEW_APP="$TARGET_VOLUME/Applications/Koala Link.app"
+if [[ -d "$OLD_APP" && -d "$NEW_APP" ]] && \
+   [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$OLD_APP/Contents/Info.plist" 2>/dev/null)" == com.savilion.koala-touch ]] && \
+   [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$NEW_APP/Contents/Info.plist" 2>/dev/null)" == com.savilion.koala-touch ]]; then
+  PREVIOUS="$TARGET_VOLUME/Library/Application Support/Koala Touch/Previous Versions"
+  mkdir -p "$PREVIOUS" || exit 1
+  /bin/mv "$OLD_APP" "$PREVIOUS/Koala Touch-$(date +%Y%m%d-%H%M%S).app.previous" || exit 1
+  echo "$(date) renamed app installed; previous Koala Touch app retained in $PREVIOUS" >> "$LOG"
+fi
 chmod 755 "$SUPPORT/install-for-user.sh" "$SUPPORT/uninstall.sh" 2>/dev/null
 USER_NAME=$(/usr/bin/stat -f %Su /dev/console)
 if [[ -z "$USER_NAME" || "$USER_NAME" == root || "$USER_NAME" == loginwindow ]]; then
@@ -19,7 +33,7 @@ HOME_DIR=$(/usr/bin/dscl . -read "/Users/$USER_NAME" NFSHomeDirectory 2>/dev/nul
 mpc=0
 /usr/sbin/ioreg -p IOUSB -l -w 0 | /usr/bin/grep -q '"USB Product Name" = "MPC Touch"' && mpc=1
 if [[ $already == 0 && $mpc == 0 ]]; then
-  echo "$(date) no MPC Touch connected; touch driver not installed (Koala Touch installs it when it first runs with one)" >> "$LOG"; exit 0
+  echo "$(date) no MPC Touch connected; touch driver not installed (Koala Link installs it when it first runs with one)" >> "$LOG"; exit 0
 fi
 {
   echo "$(date) installing the touch driver for $USER_NAME (MPC connected: $mpc, installed before: $already)"

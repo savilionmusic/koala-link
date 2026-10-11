@@ -1,12 +1,12 @@
 #!/bin/zsh
-# Koala Touch (a copy of Paper Cut's script, same driver and LaunchAgents): installs (or updates) the MPC Touch touch driver, the flight recorder and the helper
+# Koala Link (a copy of Paper Cut's script, same driver and LaunchAgents): installs (or updates) the MPC Touch touch driver, the flight recorder and the helper
 # tools for the current user, and starts them. Run by the installer as the logged-in user; safe to
 # run again by hand. Nothing is replaced unless it changed, and a replaced file is kept as
 # <name>.before-install. Exit code 10 means the touch driver changed (macOS asks for the
 # Accessibility permission once for a new driver build).
 set -u
 SRC="${PAPERCUT_SOURCE:-/Library/Application Support/Koala Touch/TouchDriver}"
-[[ -d "$SRC" ]] || SRC="/Applications/Koala Touch.app/Contents/Resources/TouchDriver"
+[[ -d "$SRC" ]] || SRC="/Applications/Koala Link.app/Contents/Resources/TouchDriver"
 # PAPERCUT_DRY_RUN=1: only print what launchctl would change (for testing).
 lc() {
   if [[ -n "${PAPERCUT_DRY_RUN:-}" && "$1" != print ]]; then echo "would run: launchctl $*"; return 0; fi
@@ -83,6 +83,6 @@ write_agent com.savilion.mpc-watch "$DEST/mpc_watch" "$LOGS/mpc_watch.log" no &&
 start_agent com.savilion.mpc-touchd $changed_driver
 start_agent com.savilion.mpc-watch $changed_watch
 
-if [[ $changed_driver == 1 ]]; then echo "Koala Touch: touch driver installed/updated"; exit 10; fi
-echo "Koala Touch: touch driver already up to date"
+if [[ $changed_driver == 1 ]]; then echo "Koala Link: touch driver installed/updated"; exit 10; fi
+echo "Koala Link: touch driver already up to date"
 exit 0

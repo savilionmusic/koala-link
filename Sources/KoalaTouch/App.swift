@@ -13,16 +13,16 @@ private enum KoalaTouchMain {
     }
 }
 
-/// Koala Touch: Koala Sampler on the Akai MPC Touch.
+/// Koala Link: Koala Sampler on the Akai MPC Touch.
 ///
-/// Koala Touch:
+/// Koala Link:
 /// - readies the touch driver and the MPC's controls;
 /// - sets Koala's MIDI map and settings (Koala closed);
 /// - opens Koala full screen on the MPC's display;
 /// - while Koala runs, routes the MPC's pads (banks A–D = Koala's 64 pads), Q-Links and KEYS/REC/PLAY, and shows the bank
 ///   overlay.
 ///
-/// When Koala quits, Koala Touch lets the MPC go and quits too.
+/// When Koala quits, Koala Link lets the MPC go and quits too.
 ///
 /// It is the Koala + MPC Touch part of Paper Picker (2026-10), on its own: no Push, no picker. Paper Cut uses the same MPC,
 /// so the two never run at once.
@@ -43,7 +43,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
     private var askedForAccessibility = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // One Koala Touch at a time: a second copy would be a second owner of the MPC.
+        // One Koala Link at a time: a second copy would be a second owner of the MPC.
         if let id = Bundle.main.bundleIdentifier,
            let other = NSRunningApplication.runningApplications(withBundleIdentifier: id).first(where: { $0.processIdentifier != getpid() && !$0.isTerminated }) {
             other.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
@@ -52,7 +52,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         }
         NSApp.setActivationPolicy(.regular)
         installMenu()
-        PickerLog.write("Koala Touch \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") started")
+        PickerLog.write("Koala Link \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") started")
         screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                                 object: nil, queue: .main) { [weak self] _ in self?.screensChanged() }
         start()
@@ -67,7 +67,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         bridge?.stop()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let terminationObserver { NSWorkspace.shared.notificationCenter.removeObserver(terminationObserver) }
-        PickerLog.write("Koala Touch quit")
+        PickerLog.write("Koala Link quit")
     }
 
     // MARK: Menu
@@ -75,14 +75,14 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         let main = NSMenu(), appItem = NSMenuItem(), appMenu = NSMenu()
         appMenu.addItem(item("Open Koala Again", #selector(openAgain), "o"))
         appMenu.addItem(.separator())
-        appMenu.addItem(item("Quit Koala Touch", #selector(quit), "q"))
+        appMenu.addItem(item("Quit Koala Link", #selector(quit), "q"))
         appItem.submenu = appMenu; main.addItem(appItem); NSApp.mainMenu = main
         let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        status.button?.title = "Koala Touch"
+        status.button?.title = "Koala Link"
         let menu = NSMenu()
         menu.addItem(item("Open Koala Again", #selector(openAgain), "o"))
         menu.addItem(.separator())
-        menu.addItem(item("Quit Koala Touch", #selector(quit), "q"))
+        menu.addItem(item("Quit Koala Link", #selector(quit), "q"))
         status.menu = menu; statusItem = status
     }
     private func item(_ title: String, _ action: Selector, _ key: String) -> NSMenuItem {
@@ -92,7 +92,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         guard koala == nil else { koala?.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]); return }
         start()
     }
-    /// Quit: Koala first (it saves its song), then Koala Touch.
+    /// Quit: Koala first (it saves its song), then Koala Link.
     @objc private func quit() {
         quitting = true
         guard let koala, !koala.isTerminated else { NSApp.terminate(nil); return }
@@ -106,7 +106,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         retry?.invalidate(); retry = nil
         if NSRunningApplication.runningApplications(withBundleIdentifier: paperCutBundleID).contains(where: { !$0.isTerminated }) {
             showCards()
-            say("Paper Cut is using the MPC Touch. Quit Paper Cut, and Koala Touch carries on by itself.")
+            say("Paper Cut is using the MPC Touch. Quit Paper Cut, and Koala Link carries on by itself.")
             later(3)
             return
         }
@@ -173,7 +173,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
                         bridge.setRoutingEnabled(false)
                         self.say(error.localizedDescription)
                         // Accessibility (to place Koala's window on the MPC's screen): macOS's own prompt, once a run; it also
-                        // puts Koala Touch in the Accessibility list. Koala Touch keeps trying and carries on once allowed.
+                        // puts Koala Link in the Accessibility list. Koala Link keeps trying and carries on once allowed.
                         if case KoalaIntegrationError.accessibilityRequired = error, !self.askedForAccessibility {
                             self.askedForAccessibility = true
                             _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
@@ -214,7 +214,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
             if app.isTerminated || (kill(pid, 0) != 0 && errno == ESRCH) { self?.koalaEnded() }
         }
     }
-    /// Koala quit: everything held is let go, the MPC is released, and Koala Touch quits too.
+    /// Koala quit: everything held is let go, the MPC is released, and Koala Link quits too.
     private func koalaEnded() {
         guard koala != nil else { return }
         watch?.invalidate(); watch = nil

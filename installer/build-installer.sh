@@ -1,6 +1,6 @@
 #!/bin/zsh
-# Builds dist/Koala-Touch-Installer.pkg:
-# - Koala Touch.app (with its icon and the touch driver inside);
+# Builds dist/Koala-Link-Installer.pkg:
+# - Koala Link.app (with its icon and the touch driver inside);
 # - the touch driver, tools and uninstall script in /Library/Application Support/Koala Touch;
 # - the scripts that set the driver up for the logged-in user (the same driver and LaunchAgents as Paper Cut).
 # It builds; it never installs.
@@ -9,18 +9,18 @@ HERE="${0:A:h}"
 KT="${HERE:h}"
 PROJECT="$KT"
 DIST="$PROJECT/dist"
-VERSION=1.2
+VERSION=1.3.0
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 "$KT/build-app.sh"
-APP="$KT/build/Koala Touch.app"
+APP="$KT/build/Koala Link.app"
 
 # Payload.
 ROOT="$WORK/root"
 SUPPORT="$ROOT/Library/Application Support/Koala Touch"
 mkdir -p "$ROOT/Applications" "$SUPPORT"
-ditto "$APP" "$ROOT/Applications/Koala Touch.app"
+ditto "$APP" "$ROOT/Applications/Koala Link.app"
 ditto "$APP/Contents/Resources/TouchDriver" "$SUPPORT/TouchDriver"
 cp "$HERE/support/install-for-user.sh" "$HERE/support/uninstall.sh" "$SUPPORT/"
 chmod 755 "$SUPPORT/"*.sh "$SUPPORT/TouchDriver/"*
@@ -45,5 +45,5 @@ ditto "$HERE/resources/headings" "$RES/headings"
 
 mkdir -p "$DIST"
 productbuild --distribution "$HERE/distribution.xml" --resources "$RES" --package-path "$WORK" \
-  "$DIST/Koala-Touch-Installer.pkg" >/dev/null
-echo "Built: $DIST/Koala-Touch-Installer.pkg ($(du -h "$DIST/Koala-Touch-Installer.pkg" | cut -f1))"
+  "$DIST/Koala-Link-Installer.pkg" >/dev/null
+echo "Built: $DIST/Koala-Link-Installer.pkg ($(du -h "$DIST/Koala-Link-Installer.pkg" | cut -f1))"
