@@ -1,0 +1,10 @@
+.build/
+build/
+.swiftpm-cache/
+.clang-cache/
+.codegraph/
+.DS_Store
+dist/*.pkg
+dist/*.zip
+*.swiftmodule
+*.pcm

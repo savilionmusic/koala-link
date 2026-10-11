@@ -1,0 +1,10 @@
+#!/bin/zsh
+# Koala Touch installer, before the files are copied: quit Koala Touch if it is running (it closes Koala, which saves).
+USER_NAME=$(/usr/bin/stat -f %Su /dev/console)
+if [[ -n "$USER_NAME" && "$USER_NAME" != root && "$USER_NAME" != loginwindow ]]; then
+  USER_ID=$(/usr/bin/id -u "$USER_NAME")
+  /bin/launchctl asuser "$USER_ID" /usr/bin/sudo -u "$USER_NAME" /usr/bin/osascript \
+    -e 'tell application id "com.savilion.koala-touch" to quit' >/dev/null 2>&1
+fi
+for i in {1..20}; do /usr/bin/pgrep -x "KoalaTouch" >/dev/null || break; sleep 0.5; done
+exit 0

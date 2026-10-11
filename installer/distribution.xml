@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>Koala Touch</title>
+    <background file="background.png" alignment="bottomleft" scaling="none"/>
+    <background-darkAqua file="background-dark.png" alignment="bottomleft" scaling="none"/>
+    <welcome file="welcome.rtfd" uti="com.apple.flat-rtfd"/>
+    <readme file="readme.rtfd" uti="com.apple.flat-rtfd"/>
+    <conclusion file="conclusion.rtfd" uti="com.apple.flat-rtfd"/>
+    <options customize="never" require-scripts="true" hostArchitectures="arm64"/>
+    <domains enable_localSystem="true"/>
+    <volume-check>
+        <allowed-os-versions><os-version min="13.0"/></allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="default"><line choice="com.savilion.koalatouch"/></line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="com.savilion.koalatouch" visible="false"><pkg-ref id="com.savilion.koalatouch"/></choice>
+    <pkg-ref id="com.savilion.koalatouch" version="1.0" onConclusion="none">KoalaTouch.pkg</pkg-ref>
+</installer-gui-script>
