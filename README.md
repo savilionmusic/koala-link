@@ -14,7 +14,7 @@ and transport controls. Koala Touch is free to download and use.
 
 ## Install
 
-1. Download **Koala Touch Installer.pkg** from Releases and run it.
+1. Download **Koala-Touch-Installer.pkg** from Releases and run it.
 2. Open Koala Touch from Applications with the MPC connected.
 3. Allow **Koala Touch** and **mpc_touchd** in System Settings → Privacy & Security → Accessibility when prompted.
 
@@ -24,7 +24,24 @@ the download, use the Open Anyway control in Privacy & Security.
 ## Controls
 
 Koala fills the MPC screen. The four pad banks provide 64 sample pads;
-Q-Links, KEYS, REC and PLAY control Koala. Quitting Koala also quits Koala Touch.
+Q-Links, 16 LEVELS, REC and PLAY control Koala. Quitting Koala also quits Koala Touch.
+
+Press **16 LEVELS** to enter Chopper keyboard mode. The physical pads send 64
+chromatic notes starting at **C−1 (MIDI note 0)**, on channel 16:
+
+| Pad bank | MIDI notes |
+| --- | --- |
+| A | 0–15 |
+| B | 16–31 |
+| C | 32–47 |
+| D | 48–63 |
+
+The first note is the bottom-left physical pad, with notes increasing across
+each row from bottom to top. Bank changes address more chops in the selected
+sample. Press **16 LEVELS** again to restore sample-pad notes 36–99. Use the
+physical button to keep the pad mapping and Koala's keyboard toggle together.
+Held notes keep their original assignment until release, even if the bank or
+mode changes.
 
 The touchscreen driver supports steady holds, drag-to-trash and two-finger
 zoom in the sample editor and piano roll. The installer sets pinch gain to
@@ -41,7 +58,7 @@ Install Xcode Command Line Tools, then run:
 ```
 
 The app is written to `build/Koala Touch.app`; the installer is written to
-`dist/Koala Touch Installer.pkg`. Building does not install either one.
+`dist/Koala-Touch-Installer.pkg`. Building does not install either one.
 
 `TouchDriver/` contains the driver source and the accepted signed binaries
 used by the app. App builds copy those binaries without re-signing them.

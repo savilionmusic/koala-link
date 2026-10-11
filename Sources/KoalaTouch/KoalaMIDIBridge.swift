@@ -10,14 +10,14 @@ struct KoalaPadMapper {
                                            0x30,0x2F,0x2D,0x2B, 0x31,0x37,0x33,0x35]
     private(set) var heldNotes: [UInt8: UInt8] = [:]
 
-    static func mappedNote(for rawNote: UInt8, bank: Int) -> UInt8? {
+    static func mappedNote(for rawNote: UInt8, bank: Int, chopperMode: Bool = false) -> UInt8? {
         guard (0..<4).contains(bank), let index = physicalPadOrder.firstIndex(of: rawNote) else { return nil }
-        return UInt8(36 + bank * 16 + index)
+        return UInt8((chopperMode ? 0 : 36) + bank * 16 + index)
     }
 
-    mutating func noteOn(_ rawNote: UInt8, bank: Int) -> UInt8? {
-        guard let mapped = Self.mappedNote(for: rawNote, bank: bank) else { return nil }
-        // A repeated note-on must not replace the captured bank assignment.
+    mutating func noteOn(_ rawNote: UInt8, bank: Int, chopperMode: Bool = false) -> UInt8? {
+        guard let mapped = Self.mappedNote(for: rawNote, bank: bank, chopperMode: chopperMode) else { return nil }
+        // A repeated note-on must not replace the captured bank/mode assignment.
         guard heldNotes[rawNote] == nil else { return nil }
         heldNotes[rawNote] = mapped
         return mapped
@@ -51,10 +51,12 @@ struct KoalaPadMapper {
 final class KoalaMIDIBridge {
     var onStatus: ((String) -> Void)?
     var onPadBankChanged: ((Int) -> Void)?
+    var onChopperModeChanged: ((Bool) -> Void)?
     /// Every message the bridge sends Koala, on the main queue. Watching only: the Push shows the MPC's
-    /// hits and follows its KEYS button.
+    /// hits and follows its 16 LEVELS button.
     var onForward: (([UInt8]) -> Void)?
     var currentPadBank: Int { queue.sync { router.padBank } }
+    var currentChopperMode: Bool { queue.sync { router.chopperMode } }
 
     private final class Connection {
         weak var owner: KoalaMIDIBridge?
@@ -193,12 +195,13 @@ final class KoalaMIDIBridge {
             let generation = setupGeneration
             controllerQueue.asyncAfter(deadline: .now() + 0.4) { [weak self] in
                 guard let self else { return }
-                let banks: (Int, Int)? = self.queue.sync {
+                let banks: (Int, Int, Bool)? = self.queue.sync {
                     guard self.isStarted, self.setupGeneration == generation, !self.connections.isEmpty else { return nil }
-                    return (self.router.padBank, self.router.qlinkBank)
+                    return (self.router.padBank, self.router.qlinkBank, self.router.chopperMode)
                 }
                 guard let banks else { return }
                 let sent = controller_initialize(Int32(banks.0), Int32(banks.1)) == 0
+                if sent { _ = controller_set_button_light(0x28, banks.2 ? 2 : 0) }
                 self.queue.async {
                     guard self.isStarted, self.setupGeneration == generation else { return }
                     self.controllerReady = sent; self.controllerSetupPending = false
@@ -207,7 +210,7 @@ final class KoalaMIDIBridge {
                         let callbacks = self.readyHandlers; self.readyHandlers.removeAll()
                         DispatchQueue.main.async { callbacks.forEach { $0() } }
                         // A selector can change while the paced initialization runs.
-                        if banks.0 != self.router.padBank || banks.1 != self.router.qlinkBank { self.updateBankLEDs() }
+                        if banks.0 != self.router.padBank || banks.1 != self.router.qlinkBank || banks.2 != self.router.chopperMode { self.updateBankLEDs() }
                     }
                 }
             }
@@ -248,8 +251,13 @@ final class KoalaMIDIBridge {
                 DispatchQueue.main.async { [weak self] in self?.onForward?(bytes) }
             case .padBank(let bank):
                 updateBankLEDs()
-                PickerLog.write("MPC pad bank \(String(UnicodeScalar(65 + bank)!)) · selectors consumed, pads Ch16 notes \(36 + bank * 16)–\(51 + bank * 16)")
+                let first = (router.chopperMode ? 0 : 36) + bank * 16
+                PickerLog.write("MPC pad bank \(String(UnicodeScalar(65 + bank)!)) · \(router.chopperMode ? "Chopper" : "Samples"), Ch16 notes \(first)–\(first + 15)")
                 if routingEnabled { DispatchQueue.main.async { [weak self] in self?.onPadBankChanged?(bank) } }
+            case .chopperMode(let enabled):
+                updateBankLEDs()
+                status(enabled ? "16 Levels · Chopper · banks A–D send C−1 upward, MIDI notes 0–63" : "16 Levels off · sample pads restored")
+                if routingEnabled { DispatchQueue.main.async { [weak self] in self?.onChopperModeChanged?(enabled) } }
             case .qlinkBank(let bank):
                 updateBankLEDs()
                 PickerLog.write("MPC Q-Link bank \(String(UnicodeScalar(65 + bank)!)) · Ch15 CC\(bank * 4 + 1)–\(bank * 4 + 4)")
@@ -263,16 +271,17 @@ final class KoalaMIDIBridge {
         let generation = setupGeneration
         controllerQueue.async { [weak self] in
             guard let self else { return }
-            let banks: (Int, Int)? = self.queue.sync {
+            let banks: (Int, Int, Bool)? = self.queue.sync {
                 guard self.isStarted, self.setupGeneration == generation else { return nil }
-                return (self.router.padBank, self.router.qlinkBank)
+                return (self.router.padBank, self.router.qlinkBank, self.router.chopperMode)
             }
             guard let banks else { return }
             _ = controller_refresh_banks(Int32(banks.0), Int32(banks.1))
+            _ = controller_set_button_light(0x28, banks.2 ? 2 : 0)
             self.queue.async {
                 guard self.isStarted, self.setupGeneration == generation else { return }
                 self.ledRefreshPending = false
-                if banks.0 != self.router.padBank || banks.1 != self.router.qlinkBank { self.updateBankLEDs() }
+                if banks.0 != self.router.padBank || banks.1 != self.router.qlinkBank || banks.2 != self.router.chopperMode { self.updateBankLEDs() }
             }
         }
     }

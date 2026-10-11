@@ -5,7 +5,7 @@ import Foundation
 /// bank at note-on and keeps that assignment until note-off.
 struct KoalaControlRouter {
     enum Role { case publicControl, privateSelector }
-    enum Event: Equatable { case midi([UInt8]), padBank(Int), qlinkBank(Int) }
+    enum Event: Equatable { case midi([UInt8]), padBank(Int), qlinkBank(Int), chopperMode(Bool) }
 
     private struct Stream {
         var status: UInt8 = 0
@@ -45,6 +45,7 @@ struct KoalaControlRouter {
     private var heldLinks: [UInt8: UInt8] = [:]
     private(set) var padBank = 0
     private(set) var qlinkBank = 0
+    private(set) var chopperMode = false
 
     mutating func selectPadBank(_ bank: Int) -> [Event] {
         guard (0..<4).contains(bank) else { return [] }
@@ -99,6 +100,12 @@ struct KoalaControlRouter {
             else { streams[source]?.buttons.remove(number) }
             let isDown = streams.values.contains { $0.buttons.contains(number) }
             guard routing, wasDown != isDown else { return [] }
+            // 16 LEVELS toggles Koala's keyboard and the 64 chromatic chop notes
+            // together. Combined port state makes a mirrored press toggle once.
+            if number == 0x28, isDown {
+                chopperMode.toggle()
+                return [.midi(Self.button(number, down: true, velocity: value)), .chopperMode(chopperMode)]
+            }
             return [.midi(Self.button(number, down: isDown, velocity: value))]
         }
 
@@ -106,7 +113,7 @@ struct KoalaControlRouter {
         // musical input. In particular, a Private pad-off cannot release Public.
         guard role == .publicControl, routing else { return [] }
         if channel == 9, KoalaPadMapper.physicalPadOrder.contains(number) {
-            if down, let note = pads.noteOn(number, bank: padBank) { return [.midi([0x9F, note, value])] }
+            if down, let note = pads.noteOn(number, bank: padBank, chopperMode: chopperMode) { return [.midi([0x9F, note, value])] }
             if up, let note = pads.noteOff(number) { return [.midi([0x8F, note, value])] }
             if kind == 0xA0, let note = pads.mappedHeldNote(for: number) { return [.midi([0xAF, note, value])] }
             return []

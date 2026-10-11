@@ -192,9 +192,10 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
             overlay.onBankSelected = { [weak bridge] bank in bridge?.selectPadBank(bank) }
             overlay.onStatus = { [weak self] text in self?.say(text) }
             bridge.onPadBankChanged = { [weak overlay] bank in overlay?.selectBank(bank) }
+            bridge.onChopperModeChanged = { [weak overlay] enabled in overlay?.setChopperMode(enabled) }
             self.overlay?.stop()
             self.overlay = overlay
-            overlay.start(application: app, screen: screen, bank: bridge.currentPadBank)
+            overlay.start(application: app, screen: screen, bank: bridge.currentPadBank, chopperMode: bridge.currentChopperMode)
         }
         say("Koala is running on the MPC Touch")
         let pid = app.processIdentifier
@@ -218,6 +219,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         koala = nil
         overlay?.stop(); overlay = nil
         bridge?.onPadBankChanged = nil
+        bridge?.onChopperModeChanged = nil
         bridge?.setRoutingEnabled(false)
         integration = nil
         PickerLog.write("Koala has quit")

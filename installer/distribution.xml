@@ -16,5 +16,5 @@
     </choices-outline>
     <choice id="default"/>
     <choice id="com.savilion.koalatouch" visible="false"><pkg-ref id="com.savilion.koalatouch"/></choice>
-    <pkg-ref id="com.savilion.koalatouch" version="1.0" onConclusion="none">KoalaTouch.pkg</pkg-ref>
+    <pkg-ref id="com.savilion.koalatouch" version="1.1" onConclusion="none">KoalaTouch.pkg</pkg-ref>
 </installer-gui-script>

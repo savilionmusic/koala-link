@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Builds dist/Koala Touch Installer.pkg:
+# Builds dist/Koala-Touch-Installer.pkg:
 # - Koala Touch.app (with its icon and the touch driver inside);
 # - the touch driver, tools and uninstall script in /Library/Application Support/Koala Touch;
 # - the scripts that set the driver up for the logged-in user (the same driver and LaunchAgents as Paper Cut).
@@ -9,7 +9,7 @@ HERE="${0:A:h}"
 KT="${HERE:h}"
 PROJECT="$KT"
 DIST="$PROJECT/dist"
-VERSION=1.0
+VERSION=1.1
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -45,5 +45,5 @@ ditto "$HERE/resources/headings" "$RES/headings"
 
 mkdir -p "$DIST"
 productbuild --distribution "$HERE/distribution.xml" --resources "$RES" --package-path "$WORK" \
-  "$DIST/Koala Touch Installer.pkg" >/dev/null
-echo "Built: $DIST/Koala Touch Installer.pkg ($(du -h "$DIST/Koala Touch Installer.pkg" | cut -f1))"
+  "$DIST/Koala-Touch-Installer.pkg" >/dev/null
+echo "Built: $DIST/Koala-Touch-Installer.pkg ($(du -h "$DIST/Koala-Touch-Installer.pkg" | cut -f1))"

@@ -26,6 +26,7 @@ final class KoalaTouchOverlay: NSObject {
     private var activationObserver: NSObjectProtocol?
     private var page: Page = .sample
     private var selectedBank = 0
+    private var chopperMode = false
     private var active = false
     private var closed = false
     private var controlsSuspended = false
@@ -34,13 +35,14 @@ final class KoalaTouchOverlay: NSObject {
     private var forwarding = false
     private var session = UUID()
 
-    func start(application: NSRunningApplication, screen: NSScreen, bank: Int) {
+    func start(application: NSRunningApplication, screen: NSScreen, bank: Int, chopperMode: Bool = false) {
         stop()
         closed = false
         session = UUID()
         self.application = application
         displayFrame = screen.frame
         selectedBank = bank
+        self.chopperMode = chopperMode
         // A fresh Koala launch opens on Sample. Header taps update the mode
         // without screen capture or extra Screen Recording permissions.
         page = .sample
@@ -105,7 +107,22 @@ final class KoalaTouchOverlay: NSObject {
         guard (0..<4).contains(bank) else { return }
         selectedBank = bank
         updateBankHighlight()
-        if page == .sample && !controlsSuspended { enqueue(.bank(bank)) }
+        if page == .sample && !controlsSuspended && !chopperMode { enqueue(.bank(bank)) }
+    }
+
+    func setChopperMode(_ enabled: Bool) {
+        chopperMode = enabled
+        // Chopper banks address more chops in the selected sample. They must
+        // never inject Koala sample-bank clicks, including already queued ones.
+        pendingPresses.removeAll { if case .bank = $0 { return true }; return false }
+        if !enabled {
+            let token = session
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self, self.session == token, !self.chopperMode,
+                      self.page == .sample else { return }
+                self.enqueue(.bank(self.selectedBank))
+            }
+        }
     }
 
     private func panel(content: NSView) -> NSPanel {
@@ -201,13 +218,14 @@ final class KoalaTouchOverlay: NSObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
                 guard let self, !self.closed else { return }
                 self.updateVisibility()
-                if self.page == .sample && !self.controlsSuspended { self.enqueue(.bank(self.selectedBank)) }
+                if self.page == .sample && !self.controlsSuspended && !self.chopperMode { self.enqueue(.bank(self.selectedBank)) }
             }
         }
     }
 
     private func enqueue(_ press: Press) {
         guard !closed, !controlsSuspended else { return }
+        if case .bank = press, chopperMode { return }
         // Keep a quick bank sweep's last pending selection, without replaying
         // stale banks after the user's hand has already moved on.
         if case .bank = press, let last = pendingPresses.last, case .bank = last {
@@ -239,7 +257,7 @@ final class KoalaTouchOverlay: NSObject {
             return
         }
         let press = pendingPresses.removeFirst()
-        if case .bank = press, page != .sample { forwardNext(); return }
+        if case .bank = press, page != .sample || chopperMode { forwardNext(); return }
         if case .mixer = press, page != .perform { forwardNext(); return }
         let point = Self.target(press, frame: window.frame)
         guard let events = Self.clickEvents(at: point) else { return }
@@ -257,7 +275,7 @@ final class KoalaTouchOverlay: NSObject {
             }
             // The user may change pages during the uncover delay. A queued
             // Sample bank press must never land on Sequence's controls.
-            if case .bank = press, self.page != .sample {
+            if case .bank = press, self.page != .sample || self.chopperMode {
                 self.finishForwarding(session: token)
                 return
             }
