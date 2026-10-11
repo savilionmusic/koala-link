@@ -9,7 +9,7 @@ HERE="${0:A:h}"
 KT="${HERE:h}"
 PROJECT="$KT"
 DIST="$PROJECT/dist"
-VERSION=1.1
+VERSION=1.2
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 

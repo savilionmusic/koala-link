@@ -6,13 +6,18 @@ import MPCControllerSetup
 /// Pure MIDI note assignment logic. Kept independent of CoreMIDI so its mapping
 /// and held-note behavior can be checked without connecting to a device.
 struct KoalaPadMapper {
+    static let sampleFirstNote = 36
+    // Koala's Chopper starts at its untransposed keyboard note, MIDI 60 (C3).
+    // A lower C happens to wrap to chop 1 at some chop counts, but rotates
+    // the slices at others. Confirmed with a 128-chop sample on 2026-10-11.
+    static let chopperFirstNote = 60
     static let physicalPadOrder: [UInt8] = [0x25,0x24,0x2A,0x52, 0x28,0x26,0x2E,0x2C,
                                            0x30,0x2F,0x2D,0x2B, 0x31,0x37,0x33,0x35]
     private(set) var heldNotes: [UInt8: UInt8] = [:]
 
     static func mappedNote(for rawNote: UInt8, bank: Int, chopperMode: Bool = false) -> UInt8? {
         guard (0..<4).contains(bank), let index = physicalPadOrder.firstIndex(of: rawNote) else { return nil }
-        return UInt8((chopperMode ? 0 : 36) + bank * 16 + index)
+        return UInt8((chopperMode ? chopperFirstNote : sampleFirstNote) + bank * 16 + index)
     }
 
     mutating func noteOn(_ rawNote: UInt8, bank: Int, chopperMode: Bool = false) -> UInt8? {
@@ -91,6 +96,28 @@ final class KoalaMIDIBridge {
         }
     }
 
+    /// A native touchscreen keyboard press already toggles Koala. Update only
+    /// our note/bank state; sending a second MIDI toggle would undo the press.
+    func keyboardToggledOnScreen() {
+        queue.async { [weak self] in
+            guard let self, self.isStarted, self.routingEnabled else { return }
+            self.handle(self.router.setChopperMode(!self.router.chopperMode), origin: "native keyboard click")
+        }
+    }
+
+    /// Koala restores this autosaved song on launch, including keyboard mode.
+    /// Read it while Koala is closed so our first physical toggle stays in sync.
+    func prepareForKoalaLaunch() {
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Music/Koala Sampler/default/song.json")
+        let saved = (try? Data(contentsOf: url)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let keyboard = saved?["keyboardMode"] as? Bool ?? false
+        let sampleBank = max(0, min(3, (saved?["selectedPad"] as? Int ?? 0) / 16))
+        queue.sync {
+            guard isStarted, !routingEnabled else { return }
+            handle(router.restoreSongControls(sampleBank: sampleBank, keyboardMode: keyboard), origin: "restored song")
+        }
+    }
+
     func start(onReady: (() -> Void)? = nil) throws {
         guard KoalaPadMapper.offlineSelfCheck(), KoalaControlRouter.offlineSelfCheck() else {
             throw NSError(domain: "KoalaTouch.MIDI", code: -1,
@@ -115,7 +142,7 @@ final class KoalaMIDIBridge {
                     for bytes in packets {
                         let events = owner.router.consume(bytes, source: connection.endpoint,
                                                           role: connection.role, routing: owner.routingEnabled)
-                        owner.handle(events)
+                        owner.handle(events, origin: connection.role == .publicControl ? "Public MIDI" : "Private MIDI")
                     }
                 }
             }
@@ -243,7 +270,7 @@ final class KoalaMIDIBridge {
         return messages(in: UnsafePointer(list)) == [long, following]
     }
 
-    private func handle(_ events: [KoalaControlRouter.Event]) {
+    private func handle(_ events: [KoalaControlRouter.Event], origin: String? = nil) {
         for event in events {
             switch event {
             case .midi(let bytes):
@@ -251,12 +278,13 @@ final class KoalaMIDIBridge {
                 DispatchQueue.main.async { [weak self] in self?.onForward?(bytes) }
             case .padBank(let bank):
                 updateBankLEDs()
-                let first = (router.chopperMode ? 0 : 36) + bank * 16
+                let first = (router.chopperMode ? KoalaPadMapper.chopperFirstNote : KoalaPadMapper.sampleFirstNote) + bank * 16
                 PickerLog.write("MPC pad bank \(String(UnicodeScalar(65 + bank)!)) · \(router.chopperMode ? "Chopper" : "Samples"), Ch16 notes \(first)–\(first + 15)")
                 if routingEnabled { DispatchQueue.main.async { [weak self] in self?.onPadBankChanged?(bank) } }
             case .chopperMode(let enabled):
+                if let origin { PickerLog.write("Keyboard mode \(enabled ? "on" : "off") · source: \(origin)") }
                 updateBankLEDs()
-                status(enabled ? "16 Levels · Chopper · banks A–D send C−1 upward, MIDI notes 0–63" : "16 Levels off · sample pads restored")
+                status(enabled ? "16 Levels · Chopper · banks A–D play chops 1–64, MIDI notes 60–123" : "16 Levels off · sample pads restored")
                 if routingEnabled { DispatchQueue.main.async { [weak self] in self?.onChopperModeChanged?(enabled) } }
             case .qlinkBank(let bank):
                 updateBankLEDs()

@@ -150,6 +150,9 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         guard koala == nil, !launching else { return }
         guard let screen = mpcScreen(), let bridge else { later(2); return }
         launching = true
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: koalaBundleID).contains(where: { !$0.isTerminated }) {
+            bridge.prepareForKoalaLaunch()
+        }
         bridge.setRoutingEnabled(true)
         let integration = KoalaIntegration()
         integration.onStatus = { [weak self] text in DispatchQueue.main.async { self?.say(text) } }
@@ -190,6 +193,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         if let screen = mpcScreen(), let bridge {
             let overlay = KoalaTouchOverlay()
             overlay.onBankSelected = { [weak bridge] bank in bridge?.selectPadBank(bank) }
+            overlay.onKeyboardToggled = { [weak bridge] in bridge?.keyboardToggledOnScreen() }
             overlay.onStatus = { [weak self] text in self?.say(text) }
             bridge.onPadBankChanged = { [weak overlay] bank in overlay?.selectBank(bank) }
             bridge.onChopperModeChanged = { [weak overlay] enabled in overlay?.setChopperMode(enabled) }

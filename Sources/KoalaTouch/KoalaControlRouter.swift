@@ -43,20 +43,40 @@ struct KoalaControlRouter {
     private var streams: [UInt32: Stream] = [:]
     private var pads = KoalaPadMapper()
     private var heldLinks: [UInt8: UInt8] = [:]
+    private var heldButtons = Set<UInt8>()
     private(set) var padBank = 0
     private(set) var qlinkBank = 0
     private(set) var chopperMode = false
+    private var sampleBank = 0
 
     mutating func selectPadBank(_ bank: Int) -> [Event] {
         guard (0..<4).contains(bank) else { return [] }
         padBank = bank
+        if !chopperMode { sampleBank = bank }
         return [.padBank(bank)]
+    }
+
+    mutating func setChopperMode(_ enabled: Bool) -> [Event] {
+        guard enabled != chopperMode else { return [] }
+        chopperMode = enabled
+        // Start at chop 1 in bank A without losing the selected sample bank.
+        padBank = enabled ? 0 : sampleBank
+        return [.chopperMode(enabled), .padBank(padBank)]
+    }
+
+    mutating func restoreSongControls(sampleBank: Int, keyboardMode: Bool) -> [Event] {
+        self.sampleBank = max(0, min(3, sampleBank))
+        chopperMode = keyboardMode
+        padBank = keyboardMode ? 0 : self.sampleBank
+        return [.chopperMode(keyboardMode), .padBank(padBank)]
     }
 
     mutating func releaseHeld() -> [Event] {
         var events = pads.releaseAll().map { Event.midi([0x8F, $0, 0]) }
         events += heldLinks.values.map { Event.midi([0x8E, $0, 0]) }
+        events += heldButtons.map { Event.midi([0x8E, $0, 0]) }
         heldLinks.removeAll()
+        heldButtons.removeAll()
         return events
     }
 
@@ -79,6 +99,10 @@ struct KoalaControlRouter {
         let down = kind == 0x90 && value > 0
         let up = kind == 0x80 || (kind == 0x90 && value == 0)
 
+        // Public is the measured source for 16 LEVELS. A delayed Private copy
+        // must not become a second keyboard toggle after Public has released.
+        if role == .privateSelector, channel == 0, number == 0x28, down || up { return [] }
+
         if channel == 0, (down || up), number == 0 || (0x23...0x26).contains(number) {
             let wasDown = streams.values.contains { $0.selectors.contains(number) }
             if down { streams[source]?.selectors.insert(number) }
@@ -100,11 +124,12 @@ struct KoalaControlRouter {
             else { streams[source]?.buttons.remove(number) }
             let isDown = streams.values.contains { $0.buttons.contains(number) }
             guard routing, wasDown != isDown else { return [] }
+            if isDown { heldButtons.insert(number) }
+            else if heldButtons.remove(number) == nil { return [] }
             // 16 LEVELS toggles Koala's keyboard and the 64 chromatic chop notes
             // together. Combined port state makes a mirrored press toggle once.
             if number == 0x28, isDown {
-                chopperMode.toggle()
-                return [.midi(Self.button(number, down: true, velocity: value)), .chopperMode(chopperMode)]
+                return [.midi(Self.button(number, down: true, velocity: value))] + setChopperMode(!chopperMode)
             }
             return [.midi(Self.button(number, down: isDown, velocity: value))]
         }

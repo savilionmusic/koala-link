@@ -26,22 +26,36 @@ the download, use the Open Anyway control in Privacy & Security.
 Koala fills the MPC screen. The four pad banks provide 64 sample pads;
 Q-Links, 16 LEVELS, REC and PLAY control Koala. Quitting Koala also quits Koala Touch.
 
-Press **16 LEVELS** to enter Chopper keyboard mode. The physical pads send 64
-chromatic notes starting at **C−1 (MIDI note 0)**, on channel 16:
+Press **16 LEVELS** to enter Chopper keyboard mode. Physical bank A pad 1
+plays **chop 1**. The pads send 64 chromatic notes starting at **MIDI note 60
+(Koala's C3)**, on channel 16:
 
-| Pad bank | MIDI notes |
-| --- | --- |
-| A | 0–15 |
-| B | 16–31 |
-| C | 32–47 |
-| D | 48–63 |
+| Pad bank | Chops with at least 64 slices | MIDI notes |
+| --- | --- | --- |
+| A | 1–16 | 60–75 |
+| B | 17–32 | 76–91 |
+| C | 33–48 | 92–107 |
+| D | 49–64 | 108–123 |
 
 The first note is the bottom-left physical pad, with notes increasing across
 each row from bottom to top. Bank changes address more chops in the selected
-sample. Press **16 LEVELS** again to restore sample-pad notes 36–99. Use the
-physical button to keep the pad mapping and Koala's keyboard toggle together.
+sample. Entering Chopper mode starts at bank A; leaving restores the previous
+sample bank and sample-pad notes 36–99. The Chopper's own chop count and
+**CHOP: NOTE** setting control how it responds to the notes. With fewer chops,
+Koala wraps notes across the available slices. With 128 chops, these four banks
+play the first 64. C−1 is below Koala's Chopper root and can shift which chop a
+pad plays when the chop count changes.
+Koala Touch follows the keyboard state in Koala's restored song and native
+Sequence keyboard-button taps, as well as the physical **16 LEVELS** button.
 Held notes keep their original assignment until release, even if the bank or
 mode changes.
+
+The sample-pad map is maintained automatically at launch with backups. Koala's
+MIDI Learn also hears the hardware's raw port, so learning these same controls
+by hand can replace the translated mapping. Quit and reopen Koala Touch to
+restore its assignments. Q-Link bank A is mapped to start, length, volume and
+pitch. Banks B–D expose CC5–16 on channel 15 for custom MIDI Learn assignments.
+See [MIDI mapping](docs/MIDI-MAPPING.md) for the physical pad table and routing details.
 
 The touchscreen driver supports steady holds, drag-to-trash and two-finger
 zoom in the sample editor and piano roll. The installer sets pinch gain to

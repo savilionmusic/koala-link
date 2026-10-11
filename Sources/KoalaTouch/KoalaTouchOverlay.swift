@@ -7,6 +7,7 @@ final class KoalaTouchOverlay: NSObject {
     private static let proxyEventTag: Int64 = 0x505049434B4552
     enum Page { case sample, sequence, perform }
     var onBankSelected: ((Int) -> Void)?
+    var onKeyboardToggled: (() -> Void)?
     var onStatus: ((String) -> Void)?
 
     private final class Panel: NSPanel {
@@ -30,6 +31,7 @@ final class KoalaTouchOverlay: NSObject {
     private var active = false
     private var closed = false
     private var controlsSuspended = false
+    private var keyboardPressPending = false
     private enum Press { case bank(Int), mixer }
     private var pendingPresses: [Press] = []
     private var forwarding = false
@@ -47,6 +49,7 @@ final class KoalaTouchOverlay: NSObject {
         // without screen capture or extra Screen Recording permissions.
         page = .sample
         controlsSuspended = false
+        keyboardPressPending = false
         overlayHidden = false
         bankButtons = []
         let bankRoot = Self.bankContent(target: self)
@@ -66,14 +69,14 @@ final class KoalaTouchOverlay: NSObject {
         togglePanel = panel(content: toggleRoot)
         updateBankHighlight()
         movePanels()
-        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
             // Our forwarded press must never be mistaken for a new header
             // touch and schedule another forwarded press.
             guard event.cgEvent?.getIntegerValueField(.eventSourceUserData) != Self.proxyEventTag else { return }
             guard let self else { return }
             let top = NSScreen.screens.first?.frame.maxY ?? self.displayFrame.maxY
             let point = event.cgEvent.map { NSPoint(x: $0.location.x, y: top - $0.location.y) } ?? NSEvent.mouseLocation
-            self.observeKoalaTouch(at: point)
+            self.observeKoalaTouch(at: point, type: event.type)
         }
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -83,6 +86,7 @@ final class KoalaTouchOverlay: NSObject {
 
     func stop() {
         closed = true
+        keyboardPressPending = false
         session = UUID()
         pendingPresses.removeAll()
         forwarding = false
@@ -196,11 +200,28 @@ final class KoalaTouchOverlay: NSObject {
         return CGPoint(x: frame.minX + frame.width * x, y: frame.minY + frame.height * (769 / 800))
     }
 
-    private func observeKoalaTouch(at point: NSPoint) {
+    private func observeKoalaTouch(at point: NSPoint, type: NSEvent.EventType) {
+        let keyboardWasPressed = keyboardPressPending
+        if type == .leftMouseUp { keyboardPressPending = false }
         guard active, let frame = koalaFrame(), displayFrame.contains(point) else { return }
         let x = (point.x - displayFrame.minX) / displayFrame.width
         let y = (displayFrame.maxY - point.y) / displayFrame.height
         guard frame.width > 0 else { return }
+        // Main keyboard key in Koala's fullscreen Sequence layout. The adjacent
+        // dropdown chooses a view and must not change the MIDI note mode.
+        let keyboardTarget = page == .sequence && !controlsSuspended &&
+            (0.265..<0.343).contains(x) && (0.465..<0.523).contains(y)
+        if type == .leftMouseUp {
+            // Commit once per completed click. Repeated down events during
+            // one contact must not toggle the bridge several times.
+            if keyboardWasPressed && keyboardTarget {
+                PickerLog.write("Koala native keyboard click completed")
+                onKeyboardToggled?()
+            }
+            return
+        }
+        keyboardPressPending = keyboardTarget
+        if keyboardTarget { return }
         if y < 0.13 {
             if (0.255..<0.383).contains(x) { page = .sample }
             else if (0.383..<0.533).contains(x) { page = .sequence }

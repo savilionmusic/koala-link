@@ -168,12 +168,14 @@ enum KoalaPushProfile {
         var list = root["mappings"] as? [[String: Any]] ?? []
         var repaired: [String] = []
         for (address, wanted) in canonicalMap {
-            let at = list.firstIndex { $0["address"] as? String == address }
-            if let at, key(of: list[at]) == wanted { continue }
-            // Another address learned onto this key: it goes (a key plays one address).
-            list.removeAll { $0["address"] as? String != address && key(of: $0) == wanted }
+            let matches = list.filter { $0["address"] as? String == address }
+            let conflict = list.contains { $0["address"] as? String != address && key(of: $0) == wanted }
+            if matches.count == 1, key(of: matches[0]) == wanted, !conflict { continue }
+            // Keep exactly one owner per address/key; stale duplicates must not
+            // override a correct entry later in Koala's saved mapping array.
+            list.removeAll { $0["address"] as? String == address || key(of: $0) == wanted }
             let entry: [String: Any] = ["address": address, "key": ["channel": wanted.channel, "type": wanted.type, "value": wanted.value]]
-            if let at = list.firstIndex(where: { $0["address"] as? String == address }) { list[at] = entry } else { list.append(entry) }
+            list.append(entry)
             repaired.append(address)
         }
         guard !repaired.isEmpty else { return [] }
