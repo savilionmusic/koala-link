@@ -1,8 +1,30 @@
 # Push 2 controls
 
-These bindings describe the **1.4.0-preview.1** prerelease (app version 1.4.0,
-build 8). The build succeeds and its screen artwork has been visually reviewed offline. Hardware is
-unavailable, so no controls have been validated on a physical Push 2.
+These bindings describe **1.4.5-preview.1** (app version 1.4.5, build 17).
+The original **1.4.0-preview.1** (app 1.4.0, build 8) was the first Push
+preview. Current new gesture behavior still needs physical validation; this
+release does not claim every control has been verified on a Push 2.
+
+Local update **1.4.3, build 15** adds normal Push pad presses that select the
+editing pad immediately. Sample notes remain mapped on channel 16; piano and
+Chopper notes use channel 13 to avoid selecting another mapped sample. The
+current song's saved waveforms are preloaded. Runtime Push connections and
+cached waveform switching have been observed; complete physical validation of
+the selection/channel split is pending.
+
+Local **1.4.4, build 16** also redraws trim markers and the highlighted range
+immediately when Push sends START/LENGTH from encoders 7/8, a trim target on
+the strip, or a recorded CC macro. Koala's saved trim values reconcile later;
+native mouse edits still depend on saved metadata. The initial START prediction
+keeps the end fixed; conclusive fresh saves teach the installed Koala version's
+boundary behavior. Physical trim agreement remains pending user feedback.
+
+**1.4.5-preview.1** includes cached fast waveform display and sample-pad
+selection, local trim-marker feedback, and local tempo, sequence, piano-roll,
+transport and playhead previews. The build is installed and running; new
+gesture behavior still needs physical validation. Timing previews use Koala
+clock when available; sequence edits reconcile against saved data, which can
+lag because of native autosave.
 
 At startup choose **Push 2** in the controller picker. Connect and power the
 Push first. Close Ableton Live, and quit Paper Cut if it owns the Push display.
@@ -103,13 +125,42 @@ On Perform, those same scene buttons control effects 9–16.
 | Clip (113) | Open SEQ. |
 | Quantize (116) | Toggle record quantization. |
 | Double Loop (117) | Double current sequence bars; SHIFT subtracts one bar. |
-| Delete (118) | On Koala’s Sample page, hold its selected pad and press Delete to clear it. If a different pad is held, the screen asks you to select it in Koala first. SHIFT invokes Koala Delete. |
-| Undo (119) | Undo; SHIFT invokes Redo. |
+| Delete (118) | Turn NOTE/keyboard mode off. Hold exactly one loaded sample pad, then press Delete. The shipped no-link route requires that pad to be Koala's selected MIDI sample pad. Only that pad is targeted. Its waveform/LED preview clears immediately; repeat playback for it pauses, but its original note-off is retained. Koala's native delete warning setting is unchanged, so confirm in Koala if prompted. The preview rolls back on cancel, a fresh save, or after 20 seconds. |
+| Undo (119) | Sends Koala Undo; SHIFT sends Redo. The display can restore only its most recent known sample deletion or sequence edit, and only until another knob or recording edit invalidates that preview. This is not a complete mirror of Koala's undo history. |
 
 The Automate macro is local to Koala Link: it records outgoing CC movement from
 encoders and the strip, not Koala's automation lane, buttons or pad notes. It
 loops the captured movement while the selected pad stays the same; changing
 the selected pad stops it. Capture is capped at 30 seconds and 4,000 CC events.
+
+## Local sequence preview (build 17)
+
+In SEQ, BPM changes by one per encoder step; Tap Tempo also estimates BPM.
+Bars increase/decrease by one up to 64, and Duplicate previews a doubled
+sequence including its notes. Clear Sequence preserves Koala's native
+confirmation. Piano Roll toggles that view independently from keyboard mode
+used to play pads. Local Record/Play indicators, provisional recorded notes
+and a playhead are shown; Koala MIDI clock is preferred, with a local estimate
+labeled **LOCAL PREVIEW** or **LOCAL** when needed. Count-in is respected.
+The local estimate waits for the configured count-in before drawing recorded notes.
+When sequence snap is enabled, queued sequence changes do not display guessed
+notes before saved sequence data agrees. See Koala's [Sequence controls](https://manual.koalasampler.com/mobile/5-sequence/) and
+[count-in setting](https://manual.koalasampler.com/mobile/8-settings/).
+
+EQ, Mixer and FX continuous values already update locally. Build 17 protects
+them with command-revision and file-save-age checks so an older snapshot cannot
+overwrite a newer command. SHIFT + SESSION toggles FX HOLD.
+
+Koala's [sample controls](https://manual.koalasampler.com/mobile/4-sample/)
+describe deleting the selected pad and the hold-Delete-then-tap-pad workflow.
+Koala Link's Push flow intentionally requires one loaded pad first, then
+Delete, and uses the selected MIDI pad on the shipped no-link route. The
+pending preview is provisional until Koala's confirmation/save resolves it.
+
+Build 17 was installed locally on October 12, 2026. The installer succeeded,
+the installed executable matched the production build, and the running app
+reported Push User mode, USB display on and its saved waveforms cached. Physical
+feedback for the new recording previews and deletion gesture is pending.
 
 ## Chopper behavior
 

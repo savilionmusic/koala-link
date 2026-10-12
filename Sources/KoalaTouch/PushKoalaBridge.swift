@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import CoreMIDI
+import Darwin
 import Push2Display
 
 struct KoalaWave: Equatable {
@@ -8,6 +9,7 @@ struct KoalaWave: Equatable {
     var slices: [Double]
     var start: Double, end: Double
     var duration: Double
+    var frames: Double = 0
 }
 
 /// Push owns its User port; Koala receives translated input from a separate
@@ -23,10 +25,26 @@ final class PushKoalaBridge {
     private var renderTimer: Timer?, fileTimer: Timer?, performanceTimer: Timer?
     private var controller: KoalaController?
     private var lastView: KoalaView?
-    private var running = false, readyDelivered = false
+    private var running = false, readyDelivered = false, controlsReady = false
     private var stamps: [String: Date] = [:]
     private let fileQueue = DispatchQueue(label: "KoalaLink.Push.Snapshots", qos: .utility)
+    private let audioQueue = DispatchQueue(label: "KoalaLink.Push.Waveforms", qos: .userInitiated)
     private var snapshotPending = false, generation = 0
+    // Lengths belong to fileQueue; decoded waveforms and requests belong to the
+    // main queue. No PCM decoding blocks snapshot updates or hardware events.
+    private var audioLengths: [KoalaAudioSignature: Double] = [:]
+    private var waveCache: [KoalaAudioSignature: KoalaWaveformAudio] = [:]
+    private var waveToken: KoalaWaveformReadToken?
+    private var waveRequested: KoalaAudioSignature?, waveRequestedPad: Int?
+    private var waveSignature: KoalaAudioSignature?, wavePad: Int?
+    private var waveFailure: (signature: KoalaAudioSignature, until: TimeInterval)?
+    private var preloadToken: KoalaWaveformReadToken?
+    private var preloadFailures: [KoalaAudioSignature: TimeInterval] = [:]
+    private var preloadCandidates: [KoalaAudioSignature] = []
+    private var preloadReported: [KoalaAudioSignature] = []
+    private var preloadNeedsScan = true, lastPreloadScan = -10.0
+    private var folderWatches: [String: (inode: UInt64, source: DispatchSourceFileSystemObject)] = [:]
+    private var waveSelectionBegan: TimeInterval?
     private var preview: NSWindow?
     private let previewView = KoalaPushPreviewView(frame: NSRect(x: 0, y: 0, width: 960, height: 160))
 
@@ -49,8 +67,11 @@ final class PushKoalaBridge {
         control.onChooseController = { [weak self] in self?.onChooseController?() }
         controller = control
         device.onEvent = { [weak self] event in
-            guard let self, self.running else { return }
-            self.controller?.handle(event); self.refresh()
+            guard let self, self.running, self.controlsReady else { return }
+            let previous = self.controller?.waveformPad
+            self.controller?.handle(event)
+            if self.controller?.waveformPad != previous { self.waveSelectionBegan = ProcessInfo.processInfo.systemUptime }
+            self.refresh()
         }
         device.onConnectionChanged = { [weak self] connected in
             guard let self, self.running else { return }
@@ -61,6 +82,7 @@ final class PushKoalaBridge {
         }
         device.onDisplayStateChanged = { [weak self] state in self?.onStatus?(state) }
         showPreview()
+        updateFolderWatches()
         refreshSnapshot(force: true)
         device.start()
         renderTimer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
@@ -71,22 +93,33 @@ final class PushKoalaBridge {
             guard let self, self.running else { return }; self.controller?.tick()
         }
         RunLoop.main.add(performanceTimer!, forMode: .common)
-        fileTimer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.refreshSnapshot() }
+        fileTimer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
+            self?.updateFolderWatches(); self?.refreshSnapshot(); self?.refreshWave(checkFile: true)
+            self?.preloadNextWave()
+        }
         RunLoop.main.add(renderTimer!, forMode: .common); RunLoop.main.add(fileTimer!, forMode: .common)
         if !device.connected { onStatus?("Waiting for Push 2 · connect USB and power") }
     }
 
-    /// Read the restored keyboard state before Koala launches. Later reads are
-    /// autosaved snapshots; they only update fields whose saved values changed.
+    /// Read the restored keyboard state and MIDI channels after Koala's profile
+    /// is prepared. Input remains paused until the expected profile is active.
     func prepareForKoalaLaunch() {
         controller?.setSession(KoalaSession.read())
         let keyboard = KoalaPushProfile.keyboardSettings()
         controller?.keyboardChannel = keyboard.channel; controller?.keyboardOffset = keyboard.offset
+        controller?.padsSelectInKoala = KoalaPushProfile.canSelectPads()
+        controlsReady = KoalaPushProfile.settingsMatch(mode: .push2)
+        refresh()
     }
 
     func stop() {
         guard running || client != 0 else { return }
-        running = false; generation += 1; snapshotPending = false; stamps = [:]; clockPosition = []
+        running = false; controlsReady = false; generation += 1; snapshotPending = false; stamps = [:]; clockPosition = []
+        waveToken?.cancel(); waveToken = nil; waveRequested = nil; waveRequestedPad = nil
+        waveSignature = nil; wavePad = nil; waveFailure = nil; waveCache = [:]
+        preloadToken?.cancel(); preloadToken = nil; preloadFailures = [:]; waveSelectionBegan = nil
+        preloadCandidates = []; preloadReported = []; preloadNeedsScan = true; lastPreloadScan = -10
+        for watch in folderWatches.values { watch.source.cancel() }; folderWatches = [:]
         renderTimer?.invalidate(); fileTimer?.invalidate(); performanceTimer?.invalidate(); renderTimer = nil; fileTimer = nil; performanceTimer = nil
         controller?.releaseAll(); controller = nil
         device.onEvent = nil; device.onConnectionChanged = nil; device.onDisplayStateChanged = nil; device.stop()
@@ -136,6 +169,7 @@ final class PushKoalaBridge {
     }
     private func refresh() {
         guard running, let controller else { return }
+        refreshWave()
         for (i, color) in controller.padColors().enumerated() { device.setPad(i, color) }
         for (cc, value) in controller.buttonLights() { device.setButton(cc, value) }
         var view = controller.view()
@@ -155,44 +189,181 @@ final class PushKoalaBridge {
             fresh[path] = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]) as? Date
         }
         guard force || fresh != stamps else { return }
-        stamps = fresh; snapshotPending = true
+        snapshotPending = true
         let token = generation
+        let selectionRevision = controller?.selectionRevision
+        let trimRevision = controller?.trimRevision
+        let commandRevision = controller?.commandRevision ?? 0
         fileQueue.async { [weak self] in
             guard let self else { return }
-            var waves: [Int: KoalaWave] = [:]
-            let snapshot = KoalaSession.read(frames: { id in
-                guard let audio = try? AVAudioFile(forReading: KoalaSession.folder.appendingPathComponent("sampler/\(id).wav")) else { return nil }
-                return Double(audio.length)
+            let snapshot = KoalaSession.readSaved(frames: { id in
+                let url = KoalaSession.folder.appendingPathComponent("sampler/\(id).wav")
+                guard let signature = KoalaAudioSignature(url: url) else { return nil }
+                if let length = self.audioLengths[signature] { return length }
+                guard let audio = try? AVAudioFile(forReading: url) else { return nil }
+                let length = Double(audio.length)
+                self.audioLengths = self.audioLengths.filter { $0.key.path != signature.path }
+                if self.audioLengths.count >= 128 { self.audioLengths.removeAll(keepingCapacity: true) }
+                self.audioLengths[signature] = length
+                return length
             })
-            if let selected = snapshot.selectedPad, let pad = snapshot.pads[selected], let id = pad.sampleID,
-               let wave = Self.readWave(id: id, pad: pad) { waves[id] = wave }
+            var after: [String: Date] = [:]
+            for name in KoalaSession.files {
+                let path = KoalaSession.folder.appendingPathComponent(name).path
+                after[path] = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]) as? Date
+            }
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.running, self.generation == token else { return }
                 self.snapshotPending = false
-                self.controller?.setSession(snapshot)
-                self.controller?.wave = snapshot.selectedPad.flatMap { snapshot.pads[$0]?.sampleID }.flatMap { waves[$0] }
+                guard let snapshot else { return }
+                // Do not apply an old/partially written snapshot if Koala saved
+                // another selection while the background read was in flight.
+                var current: [String: Date] = [:]
+                for name in KoalaSession.files {
+                    let path = KoalaSession.folder.appendingPathComponent(name).path
+                    current[path] = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]) as? Date
+                }
+                guard fresh == after, after == current else { self.refreshSnapshot(force: true); return }
+                self.stamps = after
+                let samplerPath = KoalaSession.folder.appendingPathComponent("sampler/sampler.json").path
+                self.controller?.setSession(snapshot, acceptSelection: self.controller?.selectionRevision == selectionRevision,
+                                            samplerSavedAt: after[samplerPath], readTrimRevision: trimRevision,
+                                            savedDates: Dictionary(uniqueKeysWithValues: KoalaSession.files.compactMap { name in
+                                                after[KoalaSession.folder.appendingPathComponent(name).path].map { (name, $0) }
+                                            }), readCommandRevision: commandRevision)
+                self.preloadNeedsScan = true
+                self.refreshWave(checkFile: true)
                 self.refresh()
+                self.preloadNextWave()
             }
         }
     }
-    private static func readWave(id: Int, pad: KoalaSession.Pad) -> KoalaWave? {
-        guard let file = try? AVAudioFile(forReading: KoalaSession.folder.appendingPathComponent("sampler/\(id).wav")), file.length > 0,
-              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 8192) else { return nil }
-        let count = 960, length = Double(file.length)
-        var peaks = [Float](repeating: 0, count: count)
-        // Bound the work for long recordings: sample each display column rather
-        // than read an entire song on the UI thread.
-        for column in 0..<count {
-            file.framePosition = AVAudioFramePosition(Double(column) * length / Double(count))
-            let remaining = file.length - file.framePosition
-            let amount = AVAudioFrameCount(min(256, remaining))
-            guard amount > 0, (try? file.read(into: buffer, frameCount: amount)) != nil, let data = buffer.floatChannelData else { continue }
-            var peak: Float = 0
-            for channel in 0..<Int(buffer.format.channelCount) { for i in 0..<Int(buffer.frameLength) { peak = max(peak, abs(data[channel][i])) } }
-            peaks[column] = min(1, peak)
+    private func refreshWave(checkFile: Bool = false) {
+        guard running, let controller else { return }
+        guard controller.page == .pad else { cancelWaveRead(); return }
+        let index = controller.waveformPad
+        let pad = controller.padInfo(index)
+        guard let id = pad.sampleID else {
+            cancelWaveRead()
+            waveSignature = nil; wavePad = index; controller.wave = nil
+            return
         }
-        return KoalaWave(peaks: peaks, slices: pad.slices.map { $0 / length }, start: pad.start / length,
-                         end: min(1, (pad.end ?? length) / length), duration: length / file.processingFormat.sampleRate)
+        let url = KoalaSession.folder.appendingPathComponent("sampler/\(id).wav")
+        if checkFile || wavePad != index || waveSignature?.path != url.path {
+            waveSignature = KoalaAudioSignature(url: url); wavePad = index
+        }
+        guard let signature = waveSignature else { cancelWaveRead(); controller.wave = nil; return }
+        if waveRequested != signature || waveRequestedPad != index { cancelWaveRead() }
+        if let cached = waveCache[signature] {
+            controller.updateWave(cached, pad: index)
+            if let began = waveSelectionBegan {
+                PickerLog.write("Push pad \(KoalaController.padID(index)) waveform from cache: \(Int((ProcessInfo.processInfo.systemUptime - began) * 1000)) ms")
+                waveSelectionBegan = nil
+            }
+            return
+        }
+        // A header change must never display the previous sample's waveform.
+        controller.wave = nil
+        if waveRequested == signature, waveRequestedPad == index { return }
+        if let failure = waveFailure, failure.signature == signature, ProcessInfo.processInfo.systemUptime < failure.until { return }
+        waveToken?.cancel()
+        // A played pad always takes priority over background warming.
+        preloadToken?.cancel()
+        let readToken = KoalaWaveformReadToken(), runToken = generation
+        waveToken = readToken; waveRequested = signature; waveRequestedPad = index
+        let began = ProcessInfo.processInfo.systemUptime
+        audioQueue.async { [weak self] in
+            let audio = KoalaWaveformReader.read(signature, token: readToken)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.running, self.generation == runToken, self.waveToken === readToken else { return }
+                self.waveToken = nil; self.waveRequested = nil; self.waveRequestedPad = nil
+                if let audio {
+                    self.cacheWave(audio)
+                    self.waveFailure = nil
+                    PickerLog.write("Push waveform ready: \(Int(audio.frames)) frames, \(Int((ProcessInfo.processInfo.systemUptime - began) * 1000)) ms; cached")
+                } else {
+                    self.waveFailure = (signature, ProcessInfo.processInfo.systemUptime + 0.3)
+                }
+                guard let controller = self.controller, controller.waveformPad == index,
+                      controller.padInfo(index).sampleID == id else { return }
+                self.refreshWave(checkFile: true); self.refresh()
+                self.preloadNextWave()
+            }
+        }
+    }
+    private func cancelWaveRead() {
+        waveToken?.cancel(); waveToken = nil; waveRequested = nil; waveRequestedPad = nil
+    }
+
+    private func cacheWave(_ audio: KoalaWaveformAudio) {
+        waveCache = waveCache.filter { $0.key.path != audio.signature.path }
+        if waveCache.count >= 128 { waveCache.removeAll(keepingCapacity: true) }
+        waveCache[audio.signature] = audio
+    }
+
+    /// Paper Cut prepares summaries when a project loads. Do the same for
+    /// Koala's saved WAVs, with one cancellable job and no backlog of pad work.
+    private func preloadNextWave() {
+        guard running, let controller, preloadToken == nil, waveToken == nil else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        preloadFailures = preloadFailures.filter { $0.value > now }
+        if preloadNeedsScan || now - lastPreloadScan > 2 {
+            let ids = Set(controller.session.pads.values.compactMap(\.sampleID)).sorted()
+            preloadCandidates = ids.compactMap { id in
+                KoalaAudioSignature(url: KoalaSession.folder.appendingPathComponent("sampler/\(id).wav"))
+            }
+            let live = Set(preloadCandidates)
+            waveCache = waveCache.filter { live.contains($0.key) }
+            preloadNeedsScan = false; lastPreloadScan = now
+        }
+        guard let signature = preloadCandidates.first(where: { waveCache[$0] == nil && preloadFailures[$0] == nil }) else {
+            if !preloadCandidates.isEmpty, preloadCandidates != preloadReported,
+               preloadCandidates.allSatisfy({ waveCache[$0] != nil }) {
+                preloadReported = preloadCandidates
+                PickerLog.write("Push waveform cache warm: \(preloadCandidates.count) saved samples ready")
+            }
+            return
+        }
+        let token = KoalaWaveformReadToken(), runToken = generation
+        preloadToken = token
+        audioQueue.async {
+            let audio = KoalaWaveformReader.read(signature, token: token)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.running, self.generation == runToken, self.preloadToken === token else { return }
+                self.preloadToken = nil
+                if !token.cancelled {
+                    if let audio, KoalaAudioSignature(url: URL(fileURLWithPath: signature.path)) == signature {
+                        self.cacheWave(audio)
+                        self.refreshWave(); self.refresh()
+                    } else { self.preloadFailures[signature] = ProcessInfo.processInfo.systemUptime + 1 }
+                }
+                self.preloadNextWave()
+            }
+        }
+    }
+
+    /// Directory notifications catch atomic JSON/WAV replacement as soon as
+    /// Koala saves. Polling remains a fallback when it replaces a whole folder.
+    private func updateFolderWatches() {
+        guard running else { return }
+        for url in [KoalaSession.folder, KoalaSession.folder.appendingPathComponent("sampler")] {
+            let path = url.path
+            let inode = ((try? FileManager.default.attributesOfItem(atPath: path)[.systemFileNumber]) as? NSNumber)?.uint64Value
+            if let watch = folderWatches[path], watch.inode == inode { continue }
+            folderWatches.removeValue(forKey: path)?.source.cancel()
+            guard let inode else { continue }
+            let descriptor = open(path, O_EVTONLY)
+            guard descriptor >= 0 else { continue }
+            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor, eventMask: [.write, .rename, .delete], queue: .main)
+            source.setCancelHandler { close(descriptor) }
+            source.setEventHandler { [weak self] in
+                guard let self, self.running else { return }
+                self.preloadNeedsScan = true
+                self.refreshSnapshot(); self.refreshWave(checkFile: true); self.refresh(); self.preloadNextWave()
+            }
+            folderWatches[path] = (inode, source)
+            source.resume()
+        }
     }
     private func showPreview() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 160), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)

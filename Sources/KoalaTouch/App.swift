@@ -189,7 +189,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         if !NSRunningApplication.runningApplications(withBundleIdentifier: koalaBundleID).contains(where: { !$0.isTerminated }) {
             bridge.prepareForKoalaLaunch()
         }
-        bridge.setRoutingEnabled(true)
+        bridge.setRoutingEnabled(false)
         let integration = KoalaIntegration()
         integration.onStatus = { [weak self] text in DispatchQueue.main.async { self?.say(text) } }
         self.integration = integration
@@ -199,12 +199,13 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
                 guard self.sessionGeneration == generation, self.controllerChoice == .mpcTouch else { return }
                 self.launching = false
                 switch result {
-                case .success(let app): self.started(app)
+                case .success(let app):
+                    bridge.prepareForKoalaLaunch(); bridge.setRoutingEnabled(true); self.started(app)
                 case .failure(let error):
                     self.integration = nil
-                    if let app = NSRunningApplication.runningApplications(withBundleIdentifier: self.koalaBundleID).first(where: { !$0.isTerminated }) {
+                    if KoalaPushProfile.settingsMatch(mode: .mpcTouch), let app = NSRunningApplication.runningApplications(withBundleIdentifier: self.koalaBundleID).first(where: { !$0.isTerminated }) {
                         // Koala opened, but its window couldn't be placed: it still runs with the MPC.
-                        self.started(app)
+                        bridge.prepareForKoalaLaunch(); bridge.setRoutingEnabled(true); self.started(app)
                         self.say(error.localizedDescription)
                     } else {
                         bridge.setRoutingEnabled(false)
@@ -242,16 +243,15 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
     private func launchPushKoala() {
         guard koala == nil, !launching, let screen = NSScreen.screens.first, let pushBridge else { return }
         launching = true; let generation = sessionGeneration
-        pushBridge.prepareForKoalaLaunch()
         let integration = KoalaIntegration(); self.integration = integration
         integration.onStatus = { [weak self] text in
             guard let self, self.sessionGeneration == generation else { return }; self.say(text)
         }
-        integration.open(on: screen, accessibilityOptional: true, placeWindow: false) { [weak self] result in
+        integration.open(on: screen, accessibilityOptional: true, placeWindow: false, profileMode: .push2) { [weak self] result in
             guard let self, self.sessionGeneration == generation, self.controllerChoice == .push2 else { return }
             self.launching = false
             switch result {
-            case .success(let app): self.started(app)
+            case .success(let app): pushBridge.prepareForKoalaLaunch(); self.started(app)
             case .failure(let error): self.say(error.localizedDescription)
             }
         }

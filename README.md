@@ -6,10 +6,10 @@ change controllers later from the Koala Link menu. Push 2 support is a preview:
 the build succeeds and its screen artwork has been rendered and visually reviewed
 offline. Physical Push hardware validation is still pending.
 
-MPC Touch's stable release line is **1.3.0**. The Push 2 preview is
-**1.4.0-preview.1** (app version **1.4.0**, build **8**).
+MPC Touch's stable release line is **1.3.0**. The current Push 2 preview is
+**1.4.5-preview.1** (app version **1.4.5**, build **17**).
 
-**[Download the Push 2 preview installer](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.0-preview.1)** · [MPC Touch stable installer](https://github.com/savilionmusic/koala-link/releases/tag/v1.3.0)
+**[Download the Push 2 preview installer](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.5-preview.1)** · [MPC Touch stable installer](https://github.com/savilionmusic/koala-link/releases/tag/v1.3.0)
 
 ![Koala Link controller choice](docs/screens/Koala-Link-Controller-Choice.png)
 
@@ -93,6 +93,32 @@ Preview the Push screens offline (no controller or MIDI endpoints are opened):
 ```
 
 ## Build
+
+The **1.4.5-preview.1** release is app version **1.4.5, build 17**. It includes
+cached fast waveform display and sample-pad selection, local trim feedback,
+and local sequence and piano-roll previews. Timing and sequence previews use
+Koala clock when available and reconcile with saved files; native autosave can
+delay confirmation. Delete targets one loaded sample pad at a time, retains
+Koala's native confirmation setting, and supports limited local Undo preview.
+New gesture behavior still needs physical Push validation; not every control
+has been verified on hardware.
+
+Build 16 added preloaded Push
+waveforms, immediate waveform selection on Push pad hits, and a display queue
+that sends the newest frame as soon as the previous transfer finishes. The
+normal sample-pad press selects that pad for Koala's editing controls and its
+waveform immediately. Push sample pads use channel 16; keyboard/Chopper notes
+use channel 13 with no pad mappings, keeping the source pinned. MPC Touch
+retains its accepted channel-16 keyboard profile. Controller changes reopen
+Koala normally when the MIDI settings differ. Mouse selections
+and newly recorded/imported audio still depend on Koala saving its files.
+Push START/LENGTH edits now move the waveform markers and highlighted trim
+region directly from the sent MIDI commands. Encoder, touch-strip and recorded
+macro edits share this path. Fresh saved values reconcile the display afterward;
+older reads cannot pull back a more recent edit. START's effect on the other
+boundary is learned from conclusive saved results for each Koala version.
+The original **1.4.0-preview.1** (app 1.4.0, build 8) was the first Push
+preview; the download link above now points to **1.4.5-preview.1**.
 
 Install Xcode Command Line Tools, then run:
 

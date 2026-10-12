@@ -23,6 +23,7 @@ struct KoalaSession: Equatable {
     var pads: [Int: Pad] = [:]
     var bpm: Double?, swing = 0.0, sequence = 0, bars: [Int] = [], quantizing = false
     var notes: [[Note]] = [], beatsPerBar = 4
+    var quantizeDivision = 16, sequenceSnap = "None", countInBars = 0
     var busVolume = [0.0, 0.0, 0.0, 0.0], mainVolume = 0.0
     var busMute = [false, false, false, false], busSolo = [false, false, false, false], mainMute = false
     /// The effects in each bus's chain (and the main bus's), by name; a bypassed one ends in " ·OFF".
@@ -55,8 +56,19 @@ struct KoalaSession: Equatable {
 
     /// `frames` gives a sample's length (by its id) for start/length.
     static func read(_ folder: URL = folder, frames: (Int) -> Double? = { _ in nil }) -> KoalaSession {
+        readSaved(folder, frames: frames) ?? KoalaSession()
+    }
+
+    /// Koala writes several files per save. Keep the previous display if any
+    /// document is missing or halfway through a write.
+    static func readSaved(_ folder: URL = folder, frames: (Int) -> Double? = { _ in nil }) -> KoalaSession? {
+        var documents: [String: [String: Any]] = [:]
+        for name in files {
+            guard let document = json(folder.appendingPathComponent(name)) else { return nil }
+            documents[name] = document
+        }
         var s = KoalaSession()
-        if let sampler = json(folder.appendingPathComponent("sampler/sampler.json")) {
+        if let sampler = documents["sampler/sampler.json"] {
             var names: [Int: String] = [:]
             for sample in sampler["samples"] as? [[String: Any]] ?? [] {
                 guard let id = number(sample["id"]).map({ Int($0) }), let path = (sample["metadata"] as? [String: Any])?["originalPath"] as? String, !path.isEmpty else { continue }
@@ -111,12 +123,14 @@ struct KoalaSession: Equatable {
                 s.pads[index] = pad
             }
         }
-        if let seq = json(folder.appendingPathComponent("sequence.json")) {
+        if let seq = documents["sequence.json"] {
             s.bpm = number(seq["bpm"])
             s.swing = number(seq["swing"]) ?? 0
             s.sequence = Int(number(seq["currSequenceId"]) ?? 0)
             s.quantizing = flag(seq["quantizing"]) ?? false
             s.beatsPerBar = max(1, Int(number(seq["beatsPerBar"]) ?? 4))
+            s.quantizeDivision = max(1, Int(number(seq["quantizeDivision"]) ?? 16))
+            s.sequenceSnap = seq["seqSnap"] as? String ?? "None"
             for entry in seq["sequences"] as? [[String: Any]] ?? [] {
                 let pattern = ((entry["noteSequence"] as? [String: Any])?["pattern"] as? [String: Any]) ?? [:]
                 s.bars.append(max(1, Int(number(pattern["numBars"]) ?? 1)))
@@ -129,7 +143,7 @@ struct KoalaSession: Equatable {
                 }.sorted { $0.beat < $1.beat })
             }
         }
-        if let mixer = json(folder.appendingPathComponent("mixer.json")) {
+        if let mixer = documents["mixer.json"] {
             func chain(_ bus: [String: Any]) -> [String] {
                 (bus["chain"] as? [Any] ?? []).compactMap { $0 as? [String: Any] }.compactMap { fx in
                     guard let name = fx["name"] as? String else { return nil }
@@ -148,7 +162,7 @@ struct KoalaSession: Equatable {
                 s.mainFX = chain(main)
             }
         }
-        if let fx = json(folder.appendingPathComponent("fx.json")) {
+        if let fx = documents["fx.json"] {
             s.fxHold = flag(fx["hold"]) ?? false
             if let buses = fx["buses"] as? [String: Any] {
                 let entries = ["vanilla", "strawberry"].flatMap { buses[$0] as? [[String: Any]] ?? [] }
@@ -159,11 +173,14 @@ struct KoalaSession: Equatable {
                 }
             }
         }
-        if let song = json(folder.appendingPathComponent("song.json")) {
+        if let song = documents["song.json"] {
             s.keyboard = flag(song["keyboardMode"]) ?? false
             s.selectedPad = number(song["selectedPad"]).map { Int($0) }
             s.name = song["name"] as? String ?? ""
             s.scale = song["keyboardScale"] as? String
+        }
+        if let settings = json(KoalaPushProfile.settingsFolder.appendingPathComponent("defaults.json")) {
+            s.countInBars = max(0, Int(number(settings["countInBars"]) ?? 0))
         }
         return s
     }

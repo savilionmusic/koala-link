@@ -189,6 +189,7 @@ final class Push2Device {
     private let displayQueue = DispatchQueue(label: "Koala Link Push 2 display", qos: .userInitiated)
     private var sending = false
     private var lastFrame: [UInt16]?
+    private var frameRevision: UInt64 = 0
     private var lastSent = 0.0
     private var lastOpenAttempt = 0.0
 
@@ -440,7 +441,7 @@ final class Push2Device {
     /// `keepAlive` re-sends the last one so the display doesn't go dark (it blanks after 2 s).
     func show(_ frame: [UInt16]) {
         guard frame.count == PUSH2_WIDTH * PUSH2_HEIGHT else { return }
-        lastFrame = frame
+        lastFrame = frame; frameRevision &+= 1
         pump()
     }
     func keepAlive() {
@@ -449,6 +450,7 @@ final class Push2Device {
     private func pump() {
         guard running, connected, !sending, let frame = lastFrame else { return }
         let token = currentGeneration
+        let revision = frameRevision
         let now = ProcessInfo.processInfo.systemUptime
         sending = true; lastSent = now
         let mayOpen = now - lastOpenAttempt > 2
@@ -472,6 +474,9 @@ final class Push2Device {
                 guard let self, self.isCurrent(token) else { return }
                 self.sending = false
                 if let state { self.setDisplayState(state) }
+                // Send the newest replacement as soon as USB is free. The
+                // keepalive deadline must not delay a just-rendered waveform.
+                if state == nil || state == "DISPLAY: ON", self.frameRevision != revision { self.pump() }
             }
         }
     }

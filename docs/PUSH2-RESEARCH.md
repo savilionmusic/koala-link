@@ -1,9 +1,67 @@
 # Push 2 implementation and validation
 
-Status for **Koala Link 1.4.0-preview.1** (app version 1.4.0, build 8), updated
-2026-10-11. The stable release line remains **1.3.0** for MPC Touch. The Push
-build succeeds; its screen artwork has been rendered and visually reviewed offline. The user is away from the
-hardware, so no physical Push validation has occurred.
+Status for **Koala Link 1.4.5-preview.1** (app version 1.4.5, build 17), updated
+2026-10-12. The stable release line remains **1.3.0** for MPC Touch. The first
+Push preview, **1.4.0-preview.1** (app 1.4.0, build 8), had screen artwork
+rendered and visually reviewed offline.
+The first physical Push session occurred later on 2026-10-11: the user reported
+that waveforms appeared slowly, and the runtime log showed the User MIDI and
+USB display connections opening. Full physical validation remains pending.
+
+The current **1.4.5-preview.1** build 17 is installed and running. It adds
+tempo and sequence previews, local transport/record indicators, a provisional
+playhead, count-in handling, safer snapshot reconciliation, and a pending
+single-pad delete preview. The running app reported User mode, USB display on
+and saved waveforms cached. New sequence/recording and deletion gestures still
+need physical validation; this release does not claim every control is
+verified. No automated tests were run. MPC Touch stable remains **1.3.0**.
+
+Build 16 caches decoded
+waveforms and frame lengths by audio file identity, checks saved metadata every
+150 ms, decodes sequential PCM chunks on a separate cancellable worker, and
+scales quiet waveform display peaks. These changes affect the display data
+path; Koala's autosave timing still limits when new edits become available.
+The first live build 9 waveform readiness log measured 138 ms for 7,679 frames;
+that measures decode/cache completion, not total latency on the physical screen.
+
+The second speed investigation compared Paper Cut's `WaveformCache` and
+`pushWave()` with this bridge. A native mouse selection changed Koala's visible
+pad immediately, but its `song.json` selection changed about 5.8 seconds later.
+Build 12 therefore displays a Push pad audition immediately without changing
+Koala's selected-pad controls or keyboard/Chopper source. It warms every saved
+sample in the background, gives foreground reads priority, listens for folder
+save events, and retains polling as a fallback. A pending replacement display
+frame now sends on completion of the current USB transfer, removing the old
+up-to-500-ms keepalive wait. Marked controls still act on Koala's selected pad;
+the waveform and header identify the auditioned pad. These changes do not give
+live unsaved sample or native mouse-selection feedback.
+
+Build 15 adds true sample-pad selection for Push: `midiCanSelectNotes=true`,
+mapped sample notes on channel 16, and keyboard/Chopper notes on channel 13.
+Normal sample-pad presses update the local editing target immediately; keyboard
+notes keep their source. The canonical mapping and both raw-channel-1 and
+keyboard-channel-13 conflicts are checked before Push input is enabled. A
+snapshot read begun before a newer pad choice cannot overwrite that choice.
+Switching controller profiles saves/quits Koala normally, applies the selected
+profile while it is closed, then reopens it. MPC uses the accepted channel-16
+keyboard profile with MIDI pad selection off. This split compiled successfully;
+physical selection and Chopper-source behavior need user confirmation.
+
+Build 16 adds immediate local trim-marker and range updates from actual sent
+START/LENGTH MIDI CCs, including the encoder, strip and captured-macro paths.
+The cached full waveform is reused; trims do not require PCM decoding. Saved
+metadata reconciles only after a newer command-compatible read and changed
+sampler save stamp; sample/frame/audio-identity changes invalidate pending
+ranges. Fractional encoder accumulation is preserved.
+
+Koala's exact START boundary behavior was not established by the archive. The
+renderer initially keeps the end fixed, then learns end-fixed versus
+length-fixed behavior from a conclusive START-only gesture and a settled fresh
+save. It checks the sample identity, commanded start and both predictions,
+rejects clipping/ambiguous results and gestures that also changed LENGTH, and
+stores the result by Koala version/build. This replaces the earlier pending
+manual observation request. Native mouse edits remain saved-state feedback.
+Physical marker agreement and latency are pending user feedback.
 
 ## Implemented
 
@@ -24,6 +82,28 @@ hardware, so no physical Push validation has occurred.
   counts, sequence notes, mixer/FX values, keyboard mode and selected pad.
   MIDI clock supplies transport/timing when Koala sends it. Autosaved files
   are snapshots and can lag Koala.
+- Build 17 locally previews BPM changes by one and Tap Tempo estimates, bars
+  changes by one up to 64, and Duplicate's doubled sequence including its
+  notes. Clear Sequence keeps Koala's native confirmation. Piano Roll display
+  toggling is separate from keyboard mode for playing pads. Local Record/Play
+  indicators, provisional notes and a playhead use Koala clock when available;
+  fallback estimates are labeled LOCAL PREVIEW/LOCAL. Count-in is respected.
+  For non-None snap, queued sequence changes wait for saved sequence agreement
+  before showing note guesses. See the official [Sequence](https://manual.koalasampler.com/mobile/5-sequence/)
+  and [Settings](https://manual.koalasampler.com/mobile/8-settings/) manuals.
+- EQ/Mixer/FX continuous values preview locally. Command revision and file-save
+  age checks prevent older snapshots from overwriting newer commands. SHIFT +
+  SESSION toggles FX HOLD.
+- Delete requires NOTE/keyboard mode off and exactly one loaded sample pad held
+  before DELETE; the shipped no-link path also requires it to be Koala's
+  selected MIDI sample pad. Only that pad's local waveform/LED preview clears;
+  repeat playback pauses while its original note-off is retained. Koala's
+  native warn-before-delete preference is unchanged, and a confirmation may
+  still appear. Pending deletion rolls back on cancel, a fresh save, or a
+  20-second timeout. See Koala's official [sample controls](https://manual.koalasampler.com/mobile/4-sample/)
+  for native delete behavior. Undo/Redo sends Koala's native command; local
+  restoration covers only the latest known sample deletion or sequence edit,
+  and is invalidated by further knob or recording edits—not a full undo mirror.
 - The Chopper page keeps Koala's established behavior: chop 1 is MIDI 60;
   notes 60–123 address the first 64 chops for 16/64/128 counts; smaller and odd
   counts wrap; C−1 is not chop 1. For 128 chops, an upper page is wired with

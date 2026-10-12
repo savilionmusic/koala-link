@@ -13,7 +13,8 @@ final class KoalaIntegration {
 
     /// `accessibilityOptional`: without Accessibility, Koala still opens (where macOS puts it, not
     /// fullscreen) instead of failing. For Koala on the Mac's display with the Push.
-    func open(on screen: NSScreen, accessibilityOptional: Bool = false, placeWindow: Bool = true, completion: @escaping (Result<NSRunningApplication, Error>) -> Void) {
+    func open(on screen: NSScreen, accessibilityOptional: Bool = false, placeWindow: Bool = true,
+              profileMode: KoalaPushProfile.Mode = .mpcTouch, completion: @escaping (Result<NSRunningApplication, Error>) -> Void) {
         let placement = placeWindow && AXIsProcessTrusted()
         guard placement || accessibilityOptional else {
             completion(.failure(KoalaIntegrationError.accessibilityRequired))
@@ -35,6 +36,16 @@ final class KoalaIntegration {
         }
 
         if let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first(where: { !$0.isTerminated }) {
+            if !KoalaPushProfile.settingsMatch(mode: profileMode) {
+                onStatus?("Saving and reopening Koala for the selected controller's MIDI channels…")
+                guard running.terminate() else {
+                    completion(.failure(NSError(domain: "KoalaLink.Profile", code: 1, userInfo: [NSLocalizedDescriptionKey: "Koala could not close normally. Save and quit it, then choose the controller again."])))
+                    return
+                }
+                reopen(after: running, on: screen, accessibilityOptional: accessibilityOptional, placeWindow: placeWindow,
+                       profileMode: profileMode, attempt: 0, completion: completion)
+                return
+            }
             running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
             guard placement else { completion(.success(running)); return }
             onStatus?("Koala is already running. Checking Accessibility access and moving its window…")
@@ -53,9 +64,30 @@ final class KoalaIntegration {
         }
         // Koala's MIDI settings and the MPC's keys in its map, every launch (Koala writes its settings back when it quits,
         // and MIDI Learn can grab other ports' notes). A problem here never stops Koala.
-        do { try KoalaPushProfile.prepare() } catch { PickerLog.write("Koala's MIDI map/settings not set: \(error.localizedDescription)") }
+        do { try KoalaPushProfile.prepare(mode: profileMode) }
+        catch {
+            PickerLog.write("Koala's MIDI map/settings not set: \(error.localizedDescription)")
+            if profileMode == .push2 || !KoalaPushProfile.settingsMatch(mode: profileMode) { completion(.failure(error)); return }
+        }
         onStatus?("Launching Koala…")
         launch(applicationURL: applicationURL, targetScreen: display, completion: completion)
+    }
+
+    private func reopen(after application: NSRunningApplication, on screen: NSScreen, accessibilityOptional: Bool,
+                        placeWindow: Bool, profileMode: KoalaPushProfile.Mode, attempt: Int,
+                        completion: @escaping (Result<NSRunningApplication, Error>) -> Void) {
+        if application.isTerminated {
+            open(on: screen, accessibilityOptional: accessibilityOptional, placeWindow: placeWindow, profileMode: profileMode, completion: completion)
+            return
+        }
+        guard attempt < 50 else {
+            completion(.failure(NSError(domain: "KoalaLink.Profile", code: 2, userInfo: [NSLocalizedDescriptionKey: "Koala is still closing. Finish its save/close dialog, then choose the controller again."])))
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.reopen(after: application, on: screen, accessibilityOptional: accessibilityOptional, placeWindow: placeWindow,
+                         profileMode: profileMode, attempt: attempt + 1, completion: completion)
+        }
     }
 
     private func launch(applicationURL: URL, targetScreen: NSScreen, completion: @escaping (Result<NSRunningApplication, Error>) -> Void) {

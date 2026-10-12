@@ -34,9 +34,11 @@ final class KoalaController {
 
     private(set) var session = KoalaSession()
     private(set) var page: Page = .pad
-    /// Koala's selected pad (its file): what the pad knobs and keys edit. Pad hits don't select pads in Koala ("MIDI can
-    /// select pads" is off, so keyboard mode stays on its pad).
+    /// The selected editing pad: updated directly by Push sample-pad hits
+    /// when its selection profile is active, otherwise by Koala's saved state.
     private(set) var selected = 0
+    var padsSelectInKoala = false
+    private(set) var selectionRevision: UInt64 = 0
     private(set) var keyboard: Keyboard = .off
     /// 16 Levels: how far OCTAVE ▲▼ moved the keys, in semitones.
     private(set) var octave = 0
@@ -50,7 +52,67 @@ final class KoalaController {
     private var nextRepeat = 0.0
     private var localPlaying = false
     private var localRecording = false
+    /// Command previews are display state only. Koala still owns the song.
+    private struct CommandStamp {
+        let revision: UInt64, sentAt: Date, previousSave: Date?
+        let movedAt: TimeInterval, file: String
+    }
+    private(set) var commandRevision: UInt64 = 0
+    private var commandStamps: [String: CommandStamp] = [:]
+    private var savedDates: [String: Date] = [:]
+    private var readCommandRevision: UInt64 = 0
+    private var localBPM: Double?
+    private struct SequencePreview {
+        var bars: Int, notes: [KoalaSession.Note]
+        var recording = false
+    }
+    private var sequencePreviews: [Int: SequencePreview] = [:]
+    /// An empty display while a mapped pad-delete request is being saved.
+    private var deletedPads = Set<Int>()
+    private var restoredPads: [Int: KoalaSession.Pad] = [:]
+    private enum EditPreview {
+        case pad(Int, KoalaSession.Pad)
+        case sequence(Int, SequencePreview, SequencePreview)
+    }
+    private var undoPreview: EditPreview?, redoPreview: EditPreview?
+    private var pianoRollOverride: Bool?
+    private var tempoTaps: [TimeInterval] = []
+    private var localBeatStart = 0.0, localBeatOffset = 0.0
+    private var transportCommand: Bool?
+    private var recordingStartsAt = 0.0
+    private struct RecordedHold {
+        var note: KoalaSession.Note
+        let sequence: Int, started: Double
+    }
+    private var recordedHolds: [Int: RecordedHold] = [:]
     var wave: KoalaWave?
+    private var waveOwner: (pad: Int, signature: KoalaAudioSignature)?
+    private struct StartGesture {
+        let start: Double, end: Double
+        var commandedStart: Double
+        var eligible = true
+    }
+    private struct PendingTrim {
+        let sampleID: Int, frames: Double
+        let signature: KoalaAudioSignature
+        var start: Double, end: Double
+        var revision: UInt64, sentAt: Date, movedAt: TimeInterval
+        var previousSave: Date?
+        var startGesture: StartGesture?
+    }
+    private var pendingTrims: [Int: PendingTrim] = [:]
+    private(set) var trimRevision: UInt64 = 0
+    private var samplerSavedAt: Date?, samplerReadTrimRevision: UInt64 = 0
+    private static var trimBehaviorKey: String {
+        let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.elf-audio.koala-mac")
+            ?? URL(fileURLWithPath: "/Applications/koala.app")
+        let bundle = Bundle(url: url)
+        let version = bundle?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let build = bundle?.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
+        return "KoalaTrimStartKeepsEnd.\(version).\(build)"
+    }
+    private let trimBehaviorKey = KoalaController.trimBehaviorKey
+    private var trimStartKeepsEnd = UserDefaults.standard.object(forKey: KoalaController.trimBehaviorKey) as? Bool ?? true
     var onChooseController: (() -> Void)?
 
     // Companion macros record CC movement, never destructive buttons or pad notes.
@@ -107,7 +169,12 @@ final class KoalaController {
     private var seenStates: Set<UInt8> = []
     /// With the link: the pad the PAD page edits, the last one hit (Koala's selected pad until then).
     private var lastHit: Int?
+    /// A pad audition changes the waveform immediately without retargeting
+    /// Koala's selected-pad controls or its keyboard/Chopper source.
+    private var auditionPad: Int?
     var editPad: Int { link ? (lastHit ?? selected) : selected }
+    /// The waveform must describe the same source as the PAD screen header.
+    var waveformPad: Int { if case .on(let pad) = keyboard { return pad }; return auditionPad ?? editPad }
     /// The PAD page knobs the link sets on `editPad` (the rest still act on Koala's selected pad through the map).
     static let linkKnobs: [String: UInt8] = [
         "/currPad/volume": KoalaFeedbackProtocol.volume, "/currPad/pitch": KoalaFeedbackProtocol.pitch, "/currPad/pan": KoalaFeedbackProtocol.pan,
@@ -177,7 +244,9 @@ final class KoalaController {
     }
 
     static func padID(_ pad: Int) -> String { "\(["A", "B", "C", "D"][max(0, min(3, pad / 16))])\(pad % 16 + 1)" }
-    private func padInfo(_ pad: Int) -> KoalaSession.Pad { session.pads[pad] ?? KoalaSession.Pad() }
+    func padInfo(_ pad: Int) -> KoalaSession.Pad {
+        restoredPads[pad] ?? (deletedPads.contains(pad) ? KoalaSession.Pad() : session.pads[pad] ?? KoalaSession.Pad())
+    }
     /// A chopper's chop count (0: not a chopper, or not chopped yet).
     func chops(_ pad: Int) -> Int { padInfo(pad).chopper ? max(1, min(128, chopCountOverride ?? padInfo(pad).slices.count)) : 0 }
     private func say(_ text: String, seconds: Double = 2.5) { message = text; messageUntil = now() + seconds }
@@ -185,13 +254,23 @@ final class KoalaController {
     func announce(_ text: String, seconds: Double = 10) { say(text, seconds: seconds) }
 
     // MARK: Koala's files and clock
-    func setSession(_ new: KoalaSession) {
+    func setSession(_ new: KoalaSession, acceptSelection: Bool = true,
+                    samplerSavedAt: Date? = nil, readTrimRevision: UInt64? = nil,
+                    savedDates: [String: Date] = [:], readCommandRevision: UInt64 = 0) {
         let first = !sessionRead, old = session
         sessionRead = true
         session = new
+        self.savedDates = savedDates
+        self.readCommandRevision = readCommandRevision
         if first || old.name != new.name {
+            pendingTrims = [:]
+            auditionPad = nil
             flipped = [:]; positions = [:]; lastSent = [:]; remainder = [:]
             sequencePicked = nil; fxDirty = []; ownedFX = []; chopPage = 0; chopCountOverride = nil; macroPlaying = false; macroRecording = false
+            commandStamps = [:]; sequencePreviews = [:]; deletedPads = []; restoredPads = [:]
+            undoPreview = nil; redoPreview = nil; localBPM = nil; pianoRollOverride = nil
+            recordedHolds = [:]; localPlaying = false; localRecording = false; transportCommand = nil
+            localBeatOffset = 0; localBeatStart = now(); tempoTaps = []
         } else {
             func savedFlag(_ flag: String, _ snapshot: KoalaSession) -> Bool? {
                 let parts = flag.split(separator: "#")
@@ -205,6 +284,7 @@ final class KoalaController {
                     }
                 }
                 if flag == "quantize" { return snapshot.quantizing }
+                if flag == "fxHold" { return snapshot.fxHold }
                 if flag == "mute.main" { return snapshot.mainMute }
                 if let i = Int(flag.split(separator: ".").last ?? ""), (0..<4).contains(i) {
                     if flag.hasPrefix("mute.") { return snapshot.busMute[i] }
@@ -213,26 +293,42 @@ final class KoalaController {
                 return nil
             }
             for (flag, value) in flipped {
-                if savedFlag(flag, new) == value || savedFlag(flag, old) != savedFlag(flag, new) { flipped[flag] = nil }
+                let key = "flag:" + flag
+                if commandStamps[key] != nil {
+                    if commandAcknowledged(key), savedFlag(flag, new) != nil {
+                        flipped[flag] = nil; commandStamps[key] = nil
+                    }
+                } else if savedFlag(flag, new) == value || savedFlag(flag, old) != savedFlag(flag, new) { flipped[flag] = nil }
             }
-            if sequencePicked == new.sequence || old.sequence != new.sequence { sequencePicked = nil }
+            if commandStamps["sequenceSelection"] == nil || commandAcknowledged("sequenceSelection") {
+                if sequencePicked == new.sequence || old.sequence != new.sequence { sequencePicked = nil }
+            }
             // Drop local estimates only when Koala's saved field changes. An
             // unchanged autosave is not acknowledgement of a recent movement.
             for address in Self.table.keys {
+                if Self.isTrim(address), pendingTrims[padFor(address)] != nil { continue }
                 let current = initialPosition(address)
                 session = old; let previous = initialPosition(address); session = new
-                if current != previous { positions[memoryKey(address)] = nil; lastSent[memoryKey(address)] = nil }
+                let memory = memoryKey(address), key = "position:" + memory
+                if commandStamps[key] != nil {
+                    if commandAcknowledged(key), current != nil {
+                        positions[memory] = nil; lastSent[memory] = nil; commandStamps[key] = nil
+                    }
+                } else if current != previous { positions[memory] = nil; lastSent[memory] = nil }
             }
         }
         for i in new.fx.indices where new.fxValues.indices.contains(i) {
             let value = max(0, min(127, Int((new.fxValues[i] * 127).rounded())))
             let changed = !old.fxValues.indices.contains(i) || old.fxValues[i] != new.fxValues[i] || old.fx != new.fx
-            if first || changed || !fxDirty.contains(i) {
+            let key = "fx:\(i)", acknowledged = commandAcknowledged(key)
+            if first || acknowledged || (commandStamps[key] == nil && (changed || !fxDirty.contains(i))) {
                 if !fxPress.values.contains(where: { $0.fx == i }) { fxOn[i] = value > 0 ? value : nil }
-                if changed { fxDirty.remove(i) }
+                if changed || acknowledged { fxDirty.remove(i); commandStamps[key] = nil }
             }
         }
-        if let s = new.selectedPad, (0..<64).contains(s), s != old.selectedPad || first {
+        let selectionPending = commandStamps["selection"] != nil && !commandAcknowledged("selection")
+        if acceptSelection, !selectionPending, let s = new.selectedPad, (0..<64).contains(s), s != old.selectedPad || first {
+            auditionPad = nil
             selected = s; chopPage = 0; chopCountOverride = nil
             // Koala's keyboard pad moved (a tap on Koala's screen): the pads follow it.
             if case .on = keyboard, new.keyboard { keyboard = .on(s); octave = 0 }
@@ -241,13 +337,19 @@ final class KoalaController {
         if first || new.keyboard != old.keyboard {
             if new.keyboard { keyboard = .on(selected) } else if keyboard != .choosing { keyboard = .off }
         }
+        if let samplerSavedAt {
+            self.samplerSavedAt = samplerSavedAt; samplerReadTrimRevision = readTrimRevision ?? 0
+        }
+        reconcileTrims(at: now())
+        validateEditHistory(old: old, new: new)
+        reconcileCommands()
     }
     /// Koala's MIDI clock (with Koala's Midi Clock mode on SEND): start, continue, stop, song position, ticks.
     func clock(_ status: UInt8, _ data: [UInt8], at time: TimeInterval) {
         switch status {
-        case 0xFA: transport = .running; ticks = 0; tickTimes = []
-        case 0xFB: transport = .running
-        case 0xFC: transport = .stopped
+        case 0xFA: transport = .running; ticks = 0; tickTimes = []; localPlaying = true; transportCommand = nil
+        case 0xFB: transport = .running; localPlaying = true; transportCommand = nil
+        case 0xFC: finishRecordingHolds(); transport = .stopped; localPlaying = false; localRecording = false; transportCommand = nil
         case 0xF2 where data.count == 2: ticks = (Int(data[0]) | Int(data[1]) << 7) * 6
         case 0xF8:
             if transport != .stopped { ticks += 1 }
@@ -257,13 +359,218 @@ final class KoalaController {
         default: break
         }
     }
-    var playing: Bool { transport == .unknown ? localPlaying : transport != .stopped && now() - lastTick < 0.5 }
+    var playing: Bool {
+        if let command = transportCommand { return command }
+        return transport == .unknown ? localPlaying : transport != .stopped && now() - lastTick < 0.5
+    }
     /// Koala's tempo from its clock (24 ticks a beat) while it runs; else its file's.
     var bpm: Double? {
+        if let localBPM { return localBPM }
         if now() - lastTick < 0.5, tickTimes.count >= 25, let a = tickTimes.first, let b = tickTimes.last, b > a {
             return 60 / ((b - a) / Double(tickTimes.count - 1) * 24)
         }
         return session.bpm
+    }
+
+    // MARK: Immediate command previews and saved-state reconciliation
+    private func commandFile(_ key: String) -> String {
+        if key.contains("/keyboard/scale") { return "song.json" }
+        if key == "selection" { return "song.json" }
+        if key.hasPrefix("pad:") || key.contains("/currPad/") || key.contains("#") { return "sampler/sampler.json" }
+        if key.hasPrefix("fx:") || key == "flag:fxHold" { return "fx.json" }
+        if key.contains("/mixer/") || key.hasPrefix("flag:mute.") || key.hasPrefix("flag:solo.") { return "mixer.json" }
+        return "sequence.json"
+    }
+    private func markCommand(_ key: String) {
+        let file = commandFile(key)
+        commandRevision &+= 1
+        commandStamps[key] = CommandStamp(revision: commandRevision, sentAt: Date(), previousSave: savedDates[file], movedAt: now(), file: file)
+    }
+    private func commandAcknowledged(_ key: String) -> Bool {
+        guard let stamp = commandStamps[key], let date = savedDates[stamp.file] else { return false }
+        return readCommandRevision >= stamp.revision && date != stamp.previousSave && date >= stamp.sentAt && now() - stamp.movedAt >= 0.5
+    }
+    private func sequencePreview(_ index: Int) -> SequencePreview {
+        sequencePreviews[index] ?? SequencePreview(bars: session.bars.indices.contains(index) ? session.bars[index] : 1,
+                                                  notes: session.notes.indices.contains(index) ? session.notes[index] : [])
+    }
+    private var sequenceBars: Int { sequencePreview(sequence).bars }
+    private var beatsPerBar: Int {
+        position("/sequencer/beatsPerBar").map { stepIndex($0, of: 16) + 1 } ?? session.beatsPerBar
+    }
+    private var pianoRoll: Bool { pianoRollOverride ?? (keyboard != .off) }
+    private var clockIsLive: Bool { transport == .running && now() - lastTick < 0.5 }
+    /// A local timeline is explicitly a preview. Incoming Koala clock wins.
+    private var transportBeat: Double {
+        if clockIsLive { return Double(ticks) / 24 }
+        return localBeatOffset + (localPlaying ? max(0, now() - localBeatStart) * (bpm ?? 120) / 60 : 0)
+    }
+    private func setPlaying(_ value: Bool) {
+        let beat = transportBeat
+        let restarting = value && !playing
+        if !value { finishRecordingHolds(); localRecording = false }
+        localBeatOffset = restarting ? 0 : beat
+        if restarting { recordingStartsAt = 0 }
+        localBeatStart = now(); localPlaying = value
+        transportCommand = value
+    }
+    private func invalidateUndoPreview() {
+        undoPreview = nil; redoPreview = nil
+    }
+    private func discardEditHistory(_ key: String) {
+        func matches(_ edit: EditPreview?) -> Bool {
+            guard let edit else { return false }
+            switch edit {
+            case .pad(let i, _): return key == "pad:\(i)"
+            case .sequence(let i, _, _): return key == "sequence:\(i)"
+            }
+        }
+        if matches(undoPreview) { undoPreview = nil }
+        if matches(redoPreview) { redoPreview = nil }
+    }
+    private func validateEditHistory(old: KoalaSession, new: KoalaSession) {
+        for (edit, undone) in [(undoPreview, false), (redoPreview, true)] {
+            guard let edit else { continue }
+            switch edit {
+            case .pad(let i, let before):
+                let key = "pad:\(i)"
+                guard commandStamps[key] == nil || commandAcknowledged(key) else { continue }
+                let changed = old.pads[i] != new.pads[i]
+                let matches = undone ? new.pads[i]?.sampleID == before.sampleID && new.pads[i]?.loaded == before.loaded : new.pads[i]?.loaded != true
+                if !matches && (changed || commandAcknowledged(key)) { discardEditHistory(key) }
+            case .sequence(let i, let before, let after):
+                let key = "sequence:\(i)"
+                guard new.notes.indices.contains(i), new.bars.indices.contains(i),
+                      commandStamps[key] == nil || commandAcknowledged(key) else { continue }
+                let expected = undone ? before : after
+                let changed = !old.notes.indices.contains(i) || !old.bars.indices.contains(i) || old.notes[i] != new.notes[i] || old.bars[i] != new.bars[i]
+                if changed || commandAcknowledged(key), new.notes[i] != expected.notes || new.bars[i] != expected.bars { discardEditHistory(key) }
+            }
+        }
+    }
+    private func reconcileCommands() {
+        for (key, stamp) in commandStamps {
+            // A canceled confirmation or an unsupported address must not
+            // leave a permanent phantom edit. Never alter the actual song.
+            let expired = now() - stamp.movedAt > 20
+            guard expired || commandAcknowledged(key) else { continue }
+            if expired { discardEditHistory(key) }
+            if key == "bpm" {
+                let beat = transportBeat
+                localBPM = nil; localBeatOffset = beat; localBeatStart = now(); commandStamps[key] = nil
+            }
+            else if key == "selection" { commandStamps[key] = nil }
+            else if key == "sequenceSelection" { sequencePicked = nil; commandStamps[key] = nil }
+            else if key.hasPrefix("sequence:"), let index = Int(key.dropFirst(9)) {
+                if !recordedHolds.values.contains(where: { $0.sequence == index }) || expired {
+                    sequencePreviews[index] = nil; commandStamps[key] = nil
+                }
+            } else if key.hasPrefix("pad:"), let index = Int(key.dropFirst(4)) {
+                deletedPads.remove(index); restoredPads[index] = nil; commandStamps[key] = nil
+            } else {
+                if key.hasPrefix("position:") {
+                    let memory = String(key.dropFirst(9)); positions[memory] = nil; lastSent[memory] = nil
+                } else if key.hasPrefix("flag:") { flipped[String(key.dropFirst(5))] = nil }
+                else if key.hasPrefix("fx:"), let i = Int(key.dropFirst(3)), session.fxValues.indices.contains(i) {
+                    if fxPress.values.contains(where: { $0.fx == i }), !expired { continue }
+                    let value = Int((session.fxValues[i] * 127).rounded()); fxOn[i] = value > 0 ? value : nil; fxDirty.remove(i)
+                    if value > 0 { fxAmount[i] = Double(value) }
+                }
+                commandStamps[key] = nil
+            }
+        }
+    }
+    private func previewCommand(_ address: String) {
+        switch address {
+        case "/sequencer/bpm/++", "/sequencer/bpm/--":
+            invalidateUndoPreview()
+            let beat = transportBeat
+            localBPM = max(1, (bpm ?? 120) + (address.hasSuffix("++") ? 1 : -1))
+            localBeatOffset = beat; localBeatStart = now(); markCommand("bpm")
+        case "/sequencer/tapTempo":
+            invalidateUndoPreview()
+            let t = now()
+            if let previous = tempoTaps.last, t - previous > 2 { tempoTaps = [] }
+            tempoTaps.append(t); if tempoTaps.count > 5 { tempoTaps.removeFirst() }
+            if tempoTaps.count >= 2, let first = tempoTaps.first, t > first {
+                let beat = transportBeat
+                localBPM = 60 * Double(tempoTaps.count - 1) / (t - first)
+                localBeatOffset = beat; localBeatStart = now(); markCommand("bpm")
+            }
+        case "/currSequence/numBars/++", "/currSequence/numBars/--", "/currSequence/numBars/*2", "/currSequence/clear":
+            finishRecordingHolds()
+            let before = sequencePreview(sequence)
+            var after = before
+            if address == "/currSequence/clear" { after.notes = [] }
+            else if address.hasSuffix("*2") {
+                after.bars = min(64, before.bars * 2)
+                let offset = Double(before.bars * beatsPerBar)
+                after.notes += before.notes.map { var n = $0; n.beat += offset; return n }.filter { $0.beat < Double(after.bars * beatsPerBar) }
+            } else { after.bars = max(1, min(64, before.bars + (address.hasSuffix("++") ? 1 : -1))) }
+            after.notes = after.notes.filter { $0.beat < Double(after.bars * beatsPerBar) }
+            sequencePreviews[sequence] = after; markCommand("sequence:\(sequence)")
+            undoPreview = .sequence(sequence, before, after); redoPreview = nil
+        case "/pianoroll/toggle": pianoRollOverride = !pianoRoll
+        case "/perform/hold/toggle": invalidateUndoPreview(); flipped["fxHold"] = !state("fxHold", session.fxHold); markCommand("flag:fxHold")
+        case "/metro/toggle": flipped["metro"] = !state("metro", false)
+        case "/solo/toggle": flipped["sampleSolo"] = !state("sampleSolo", false)
+        case "/undo", "/redo":
+            let undo = address == "/undo"
+            guard let edit = undo ? undoPreview : redoPreview else { return }
+            switch edit {
+            case .pad(let index, let pad):
+                if undo { deletedPads.remove(index); restoredPads[index] = pad }
+                else { restoredPads[index] = nil; deletedPads.insert(index) }
+                markCommand("pad:\(index)")
+            case .sequence(let index, let before, let after):
+                sequencePreviews[index] = undo ? before : after; markCommand("sequence:\(index)")
+            }
+            if undo { redoPreview = edit; undoPreview = nil } else { undoPreview = edit; redoPreview = nil }
+        default: break
+        }
+    }
+
+    /// Draw outgoing recording notes immediately, retaining their original
+    /// source, pitch, slice and sequence through mode and bank changes.
+    private func beginRecording(_ index: Int, velocity: UInt8) {
+        guard localRecording, playing, transportBeat >= recordingStartsAt else { return }
+        guard let on = heldPadOns[index], Int(on[0] & 0x0F) + 1 == (keyboard == .off ? 16 : keyboardChannel) else { return }
+        // With a queued sequence change, its start is unknown until Koala saves.
+        let snapPosition = position("/sequencer/seqSnap")
+        let snapOff = snapPosition.map { stepIndex($0, of: 4) == 0 } ?? (session.sequenceSnap == "None")
+        guard snapOff || sequence == session.sequence else { return }
+        let source: Int, pitch: Double, slice: Int?
+        let pad = Push2Protocol.koalaPad(forPush: index)
+        switch keyboard {
+        case .off: source = pad; pitch = 0; slice = nil
+        case .on(let p):
+            source = p
+            if chops(p) > 0 { slice = (chopPage * 64 + pad) % chops(p); pitch = 0 }
+            else { slice = nil; pitch = Double(keyboardOffset + octave + index - 60) }
+        case .choosing: return
+        }
+        guard padInfo(source).loaded else { return }
+        invalidateUndoPreview()
+        let absolute = max(0, transportBeat - recordingStartsAt)
+        let span = Double(sequenceBars * beatsPerBar)
+        let step = 4 / Double(session.quantizeDivision)
+        let beat = quantizing ? (absolute / step).rounded() * step : absolute
+        let note = KoalaSession.Note(pad: source, beat: beat.truncatingRemainder(dividingBy: max(1, span)), length: step,
+                                    pitch: pitch, velocity: Double(velocity), slice: slice)
+        recordedHolds[index] = RecordedHold(note: note, sequence: sequence, started: absolute)
+    }
+    private func finishRecording(_ index: Int) {
+        guard let held = recordedHolds.removeValue(forKey: index) else { return }
+        var note = held.note
+        note.length = max(1.0 / 4096, transportBeat - recordingStartsAt - held.started)
+        var preview = sequencePreview(held.sequence)
+        preview.notes.removeAll { $0.pad == note.pad && $0.pitch == note.pitch && $0.slice == note.slice && abs($0.beat - note.beat) < 0.125 }
+        preview.notes.append(note); preview.recording = true
+        if preview.notes.count > 8192 { preview.notes.removeFirst(preview.notes.count - 8192) }
+        sequencePreviews[held.sequence] = preview; markCommand("sequence:\(held.sequence)")
+    }
+    private func finishRecordingHolds() {
+        for index in Array(recordedHolds.keys) { finishRecording(index) }
     }
 
     // MARK: Knobs
@@ -312,7 +619,8 @@ final class KoalaController {
     /// Where a knob starts: Koala's own value from its files, on the estimated scale; nil when the files don't say (or
     /// don't say on a known scale), so the screen shows "–" until the knob is turned.
     func initialPosition(_ address: String) -> Double? {
-        let pad = padInfo(padFor(address))
+        let index = padFor(address), pad = padInfo(index)
+        let frames = pad.frames ?? (waveOwner?.pad == index ? wave?.frames : nil)
         func level(_ v: Double) -> Double { max(0, min(127, v * 127)) }
         func centred(_ v: Double, _ range: Double) -> Double { max(0, min(127, 63.5 + v / range * 63.5)) }
         func freq(_ hz: Double) -> Double { max(0, min(127, log(max(20, hz) / 20) / log(1000) * 127)) }
@@ -324,10 +632,10 @@ final class KoalaController {
         case "/currPad/sample/tone": return centred(pad.tone, 1)
         case "/currPad/sample/ampEnvelope/attack": return level(pad.attack / 2)
         case "/currPad/sample/ampEnvelope/release": return level(pad.release / 2)
-        case "/currPad/sample/start": return pad.frames.map { level(pad.start / max(1, $0)) } ?? 0
+        case "/currPad/sample/start": return frames.map { level(pad.start / max(1, $0)) } ?? 0
         case "/currPad/sample/length":
-            guard let frames = pad.frames, let end = pad.end else { return 127 }
-            return level((end - pad.start) / max(1, frames))
+            guard let frames else { return 127 }
+            return level(((pad.end ?? frames) - pad.start) / max(1, frames))
         case "/currPad/eq/band0/freq": return freq(pad.eqFreq[0])
         case "/currPad/eq/band1/freq": return freq(pad.eqFreq[1])
         case "/currPad/eq/band2/freq": return freq(pad.eqFreq[2])
@@ -346,6 +654,10 @@ final class KoalaController {
             return stepPosition(i, of: names.count)
         case "/sequencer/swing": return level(session.swing)
         case "/sequencer/beatsPerBar": return stepPosition(max(0, min(15, session.beatsPerBar - 1)), of: 16)
+        case "/sequencer/seqSnap":
+            let names = ["None", "1 Beat", "1 Bar", "Seq End"]
+            guard let i = names.firstIndex(where: { $0.caseInsensitiveCompare(session.sequenceSnap) == .orderedSame }) else { return nil }
+            return stepPosition(i, of: 4)
         default: return nil
         }
     }
@@ -353,7 +665,13 @@ final class KoalaController {
     func stepPosition(_ i: Int, of n: Int) -> Double { min(127, (Double(i) + 0.5) * 128 / Double(n)) }
     func stepIndex(_ position: Double, of n: Int) -> Int { max(0, min(n - 1, Int(position * Double(n) / 128))) }
     /// A knob's position: what the Push sent, else Koala's files, else nil (unknown).
-    func position(_ address: String) -> Double? { positions[memoryKey(address)] ?? initialPosition(address) }
+    func position(_ address: String) -> Double? {
+        if let value = positions[memoryKey(address)] { return value }
+        if Self.isTrim(address), let trim = pendingTrims[padFor(address)] {
+            return (address == "/currPad/sample/start" ? trim.start : trim.end - trim.start) / trim.frames * 127
+        }
+        return initialPosition(address)
+    }
     /// Encoder steps per step of a list or ± knob.
     static let stepsPerClick = 6
     private func turn(_ knob: Knob, delta: Int) {
@@ -382,15 +700,109 @@ final class KoalaController {
         let v = max(0, min(127, value)), memory = memoryKey(address), target = Int(v.rounded())
         positions[memory] = v
         guard lastSent[memory] != target else { return }
+        invalidateUndoPreview()
         // Over the link the edit names its pad (the one last hit); otherwise the map's CC acts on Koala's selected pad.
         if link, let function = Self.linkKnobs[address] {
             lastSent[memory] = target
             linkSend(KoalaFeedbackProtocol.padEdit(function, pad: editPad, value: UInt8(target)))
+            markCommand("position:" + memory)
             return
         }
         guard let message = Self.table[address]?.set(target) else { return }
         lastSent[memory] = target
         emit(message)
+        if !Self.isTrim(address) { markCommand("position:" + memory) }
+        recordTrim(address, value: target)
+    }
+
+    private static func isTrim(_ address: String) -> Bool {
+        address == "/currPad/sample/start" || address == "/currPad/sample/length"
+    }
+
+    /// Draw the marker position we commanded; a metadata save can acknowledge
+    /// it later without holding up the encoder, strip, or recorded CC macro.
+    private func recordTrim(_ address: String, value: Int) {
+        guard Self.isTrim(address) else { return }
+        let index = padFor(address), pad = padInfo(index)
+        guard let sampleID = pad.sampleID else { return }
+        guard let owner = waveOwner, owner.pad == index, let wave,
+              KoalaAudioSignature(url: URL(fileURLWithPath: owner.signature.path)) == owner.signature else { return }
+        let frames = wave.frames
+        guard frames > 0, frames.isFinite else { return }
+        let start = max(0, min(frames, pad.start)), end = max(start, min(frames, pad.end ?? frames))
+        let existing = pendingTrims[index]
+        var trim = existing ?? PendingTrim(sampleID: sampleID, frames: frames, signature: owner.signature,
+                                          start: start, end: end, revision: 0, sentAt: Date(), movedAt: now(), previousSave: samplerSavedAt)
+        let commanded = floor(Double(max(0, min(127, value))) / 127 * frames)
+        if address == "/currPad/sample/start" {
+            if existing == nil { trim.startGesture = StartGesture(start: start, end: end, commandedStart: commanded) }
+            if var gesture = trim.startGesture {
+                gesture.commandedStart = commanded
+                // Clipping can make both predictions agree or change length
+                // mid-gesture. Such a save cannot identify START's behavior.
+                if commanded >= gesture.end - 1 || commanded + gesture.end - gesture.start >= frames - 1 { gesture.eligible = false }
+                trim.startGesture = gesture
+            }
+            if trimStartKeepsEnd { trim.start = min(commanded, max(0, trim.end - 1)) }
+            else {
+                let length = trim.end - trim.start
+                trim.start = commanded; trim.end = min(frames, commanded + length)
+            }
+            let lengthKey = "/currPad/sample/length#\(index)"
+            positions[lengthKey] = (trim.end - trim.start) / frames * 127
+            lastSent[lengthKey] = nil
+        } else {
+            trim.startGesture = nil
+            trim.end = min(frames, trim.start + commanded)
+        }
+        trimRevision &+= 1
+        trim.revision = trimRevision; trim.sentAt = Date(); trim.movedAt = now()
+        trim.previousSave = samplerSavedAt
+        pendingTrims[index] = trim
+    }
+
+    func updateWave(_ audio: KoalaWaveformAudio, pad index: Int) {
+        if let trim = pendingTrims[index], trim.frames != audio.frames || trim.signature != audio.signature { clearTrim(index) }
+        waveOwner = (index, audio.signature)
+        session.pads[index]?.frames = audio.frames
+        wave = audio.wave(for: padInfo(index))
+    }
+
+    private func clearTrim(_ index: Int) {
+        pendingTrims[index] = nil
+        for address in ["/currPad/sample/start", "/currPad/sample/length"] {
+            let key = "\(address)#\(index)"
+            positions[key] = nil; lastSent[key] = nil
+        }
+    }
+
+    private func reconcileTrims(at time: TimeInterval) {
+        guard !pendingTrims.isEmpty else { return }
+        for (index, trim) in pendingTrims {
+            let pad = padInfo(index)
+            guard pad.sampleID == trim.sampleID, pad.frames == nil || pad.frames == trim.frames else { clearTrim(index); continue }
+            // A read begun before this command, or a save older than it, must
+            // not pull the markers backward during an encoder movement.
+            guard let samplerSavedAt, samplerSavedAt != trim.previousSave,
+                  samplerSavedAt >= trim.sentAt, samplerReadTrimRevision >= trim.revision else { continue }
+            let agrees = abs(pad.start - trim.start) <= 1 && abs((pad.end ?? trim.frames) - trim.end) <= 1
+            let settled = time - trim.movedAt >= 0.4
+            if settled, let gesture = trim.startGesture, gesture.eligible,
+               abs(gesture.commandedStart - gesture.start) > 2, abs(pad.start - gesture.commandedStart) <= 1,
+               KoalaAudioSignature(url: URL(fileURLWithPath: trim.signature.path)) == trim.signature {
+                let savedEnd = pad.end ?? trim.frames
+                let keepsEnd = abs(savedEnd - gesture.end) <= 1
+                let keepsLength = abs((savedEnd - pad.start) - (gesture.end - gesture.start)) <= 1
+                if keepsEnd != keepsLength, trimStartKeepsEnd != keepsEnd || UserDefaults.standard.object(forKey: trimBehaviorKey) == nil {
+                    trimStartKeepsEnd = keepsEnd
+                    UserDefaults.standard.set(keepsEnd, forKey: trimBehaviorKey)
+                    PickerLog.write("Koala START behavior learned from fresh save: \(keepsEnd ? "end stays fixed" : "length stays fixed")")
+                }
+            }
+            // Keep the gesture until it settles, even if an interim autosave
+            // matches. A later LENGTH turn must invalidate START inference.
+            if trim.startGesture != nil ? settled : agrees || settled { clearTrim(index) }
+        }
     }
     func knobText(_ knob: Knob) -> String {
         if case .relative = knob.kind {} else if position(knob.address) == nil { return "–" }
@@ -414,7 +826,7 @@ final class KoalaController {
             return abs(v) < 0.05 ? "0" + unit : String(format: "%+.1f", v).replacingOccurrences(of: "-", with: "−") + unit
         case .relative:
             if knob.address == "bpm" { return bpm.map { String(format: "%.1f", $0) } ?? "–" }
-            let bars = session.bars.indices.contains(sequence) ? session.bars[sequence] : 1
+            let bars = sequenceBars
             return "\(bars) BAR\(bars == 1 ? "" : "S")"
         }
     }
@@ -425,18 +837,21 @@ final class KoalaController {
         guard let key = Self.table[address] else { return }
         if let on = key.press(true, velocity: Self.buttonVelocity) { send(on) }
         if let off = key.press(false) { send(off) }
+        previewCommand(address)
         if let what { say(what) }
     }
     /// A Koala on/off switch: one press, and the Push shows the new state until Koala's files catch up.
     private func flip(_ address: String, _ flag: String, _ current: Bool, _ name: String) {
         tap(address)
         flipped[flag] = !current
+        invalidateUndoPreview(); markCommand("flag:" + flag)
         say("\(name) \(current ? "OFF" : "ON")")
     }
     /// Over the link: an on/off switch set on `editPad` by name (one shot, loop, reverse).
     private func linkSwitch(_ function: UInt8, _ flag: String, _ current: Bool, _ name: String) {
         linkSend(KoalaFeedbackProtocol.padEdit(function, pad: editPad, value: current ? 0 : 127))
         flipped[flag] = !current
+        invalidateUndoPreview(); markCommand("flag:" + flag)
         say("\(name) \(current ? "OFF" : "ON") · \(Self.padID(editPad))")
     }
     private func state(_ flag: String, _ file: Bool) -> Bool { flipped[flag] ?? file }
@@ -476,9 +891,8 @@ final class KoalaController {
         koalaPage = target
     }
 
-    /// Same verified toggle as MPC 16 LEVELS: keyboard mode acts on Koala's
-    /// selected pad. With MIDI-can-select-pads disabled, a pad hit must not
-    /// silently change the keyboard source or pretend it selected a new pad.
+    /// Keyboard/Chopper mode pins the selected source. Its notes use a separate
+    /// channel in the Push profile and must not select mapped sample pads.
     private func keyboardPressed(send sendIt: Bool) {
         if sendIt { tap("/keyboard/toggle") }
         switch keyboard {
@@ -522,8 +936,9 @@ final class KoalaController {
         switch page {
         // MUTE and SOLO act on Koala's selected pad: marked * while that isn't the pad being edited.
         case .pad:
-            let mark = link && editPad != selected ? "*" : ""
-            return ["ONE SHOT", "LOOP", "REVERSE", "MUTE" + mark, "SOLO" + mark, shift ? "HEADPHONES" : "MIC IN", "RESAMPLE", "FILE IN"]
+            let editMark = waveformPad != editPad ? "*" : ""
+            let selectedMark = waveformPad != selected ? "*" : ""
+            return ["ONE SHOT" + editMark, "LOOP" + editMark, "REVERSE" + editMark, "MUTE" + selectedMark, "SOLO" + selectedMark, shift ? "HEADPHONES" : "MIC IN", "RESAMPLE", "FILE IN"]
         case .eq: return ["LOW FLAT", "MID FLAT", "HIGH FLAT", "ALL FLAT", "ONE SHOT", "LOOP", "REVERSE", "MUTE"]
         case .fx: return Array(session.fx.prefix(8))
         case .mixer: return (soloHeld ? ["SOLO A", "SOLO B", "SOLO C", "SOLO D", ""] : ["MUTE A", "MUTE B", "MUTE C", "MUTE D", "MUTE MAIN"]) + ["PAD", "PERFORM", "SEQUENCE"]
@@ -538,11 +953,14 @@ final class KoalaController {
             if looping { on.insert(1) }
             if reversed { on.insert(2) }
             if muted { on.insert(3) }
+            if state("sampleSolo", false) { on.insert(4) }
         case .fx: on = Set(fxOn.keys.filter { $0 < 8 })
         case .mixer: for i in 0..<(soloHeld ? 4 : 5) where soloHeld ? busSoloed(i) : busMuted(i) { on.insert(i) }
         case .seq:
             if playing { on.insert(0) }
+            if localRecording { on.insert(1) }
             if quantizing { on.insert(2) }
+            if pianoRoll { on.insert(3) }
         case .eq: break
         }
         return on
@@ -611,8 +1029,18 @@ final class KoalaController {
         default: flip("/mute/toggle", "mute#\(selected)", muted, "MUTE")
         }
     }
-    private func togglePlay() { tap("/sequencer/play/toggle", playing ? "STOP" : "PLAY"); localPlaying = !playing }
-    private func toggleRecord() { tap("/sequencer/record/toggle", "RECORD"); localRecording.toggle() }
+    private func togglePlay() {
+        let value = !playing
+        tap("/sequencer/play/toggle", value ? "PLAY" : "STOP"); setPlaying(value)
+    }
+    private func toggleRecord() {
+        let value = !localRecording, wasPlaying = playing
+        tap("/sequencer/record/toggle", value ? "RECORD · LOCAL PREVIEW" : "RECORD OFF")
+        if !value { finishRecordingHolds() }
+        else if !wasPlaying { setPlaying(true) }
+        localRecording = value
+        if value { recordingStartsAt = wasPlaying ? 0 : Double(session.countInBars * beatsPerBar) }
+    }
     /// The side (scene) buttons, top first: sequences of the bank, or on the FX page effects 9–16.
     private func scene(_ i: Int, cc: Int, down: Bool) {
         if page == .fx { fxButton(8 + i, cc: cc, down: down); return }
@@ -620,6 +1048,7 @@ final class KoalaController {
         let index = sequenceBank * 8 + i
         tap(KoalaPushProfile.sequenceAddress(index), "SEQUENCE \(index + 1)")
         sequencePicked = index
+        markCommand("sequenceSelection")
     }
 
     // MARK: Effects
@@ -635,6 +1064,7 @@ final class KoalaController {
         let message = key.type == "cc" ? key.set(level) : (level > 0 ? key.press(true, velocity: UInt8(level)) : key.press(false))
         if let message { emit(message) }
         fxOn[i] = level > 0 ? level : nil; fxDirty.insert(i); ownedFX.insert(i)
+        invalidateUndoPreview(); markCommand("fx:\(i)")
     }
     /// Tap an effect: on (the strip sets it); tap again: off. Hold one that was off: on only while held. Pressing
     /// another one that's on just picks it for the strip.
@@ -737,7 +1167,9 @@ final class KoalaController {
         case .choosing:
             // This hit (the pad's own note) puts Koala's keyboard mode on it.
             hold(index, address: KoalaPushProfile.padAddress(pad), velocity: velocity)
-            keyboard = .on(pad); selected = pad; octave = 0; chopPage = 0; chopCountOverride = nil; lastHit = pad
+            keyboard = .on(pad); selected = pad; auditionPad = pad; octave = 0; chopPage = 0; chopCountOverride = nil; lastHit = pad
+            selectionRevision &+= 1
+            markCommand("selection")
             say(chops(pad) > 0 ? "KEYBOARD ON \(Self.padID(pad)): ITS \(chops(pad)) CHOPS ON THE PADS" : "KEYBOARD ON \(Self.padID(pad)): 16 LEVELS · OCTAVE ▲▼", seconds: 4)
         case .on(let keys) where chops(keys) > 0:
             // Same A–D quadrants as MPC; small/odd counts wrap, and page 2
@@ -747,7 +1179,13 @@ final class KoalaController {
             // 16 Levels: rows of 8 from the bottom left, chromatic; key 25 = the pad's own pitch.
             hold(index, note: keyboardOffset + octave + index, velocity: velocity)
         case .off:
+            auditionPad = pad
             hold(index, address: KoalaPushProfile.padAddress(pad), velocity: velocity)
+            if padsSelectInKoala {
+                selected = pad; selectionRevision &+= 1
+                markCommand("selection")
+                chopPage = 0; chopCountOverride = nil
+            }
             // Over the link: this is the pad the PAD page edits now, and Koala's screen shows its bank.
             if link {
                 lastHit = pad
@@ -756,6 +1194,7 @@ final class KoalaController {
             let info = padInfo(pad)
             say("\(Self.padID(pad)) · \(!info.loaded ? "EMPTY" : info.label.isEmpty ? "—" : info.label)", seconds: 1.5)
         }
+        if heldPads[index] != nil { beginRecording(index, velocity: velocity) }
     }
     private func hold(_ index: Int, address: String, velocity: UInt8) {
         guard let key = Self.table[address], let on = key.press(true, velocity: velocity), let off = key.press(false) else { return }
@@ -771,11 +1210,40 @@ final class KoalaController {
     }
 
     private func releasePad(_ index: Int) {
+        finishRecording(index)
         guard let off = heldPads.removeValue(forKey: index) else { return }
         heldPadOns[index] = nil
         // Odd/small chop counts can alias physical pads onto the same MIDI
         // note. Keep it sounding until the last owner lets go.
         if !heldPads.values.contains(off) { send(off) }
+    }
+    private func deleteSample(_ pad: Int) {
+        let before = padInfo(pad)
+        guard before.loaded else { say("\(Self.padID(pad)) IS ALREADY EMPTY"); return }
+        if link {
+            guard koalaPage == .sample else { say("OPEN KOALA'S SAMPLE PAGE TO DELETE A SAMPLE"); return }
+            linkSend([KoalaFeedbackProtocol.delete, UInt8(pad / 16), UInt8(pad % 16)])
+        } else {
+            guard selected == pad, padsSelectInKoala else {
+                say("SELECT \(Self.padID(pad)) IN KOALA FIRST · THEN HOLD IT + DELETE", seconds: 4); return
+            }
+            tap("/currPad/delete")
+        }
+        for index in heldPads.keys where Push2Protocol.koalaPad(forPush: index) == pad {
+            // Leave its note-off ownership intact, but stop local Repeat from
+            // retriggering the now-empty pad and engaging MIDI recording.
+            heldPadOns[index] = nil; recordedHolds[index] = nil
+        }
+        restoredPads[pad] = nil; deletedPads.insert(pad); markCommand("pad:\(pad)")
+        clearTrim(pad)
+        let suffix = "#\(pad)"
+        for key in positions.keys.filter({ $0.hasSuffix(suffix) }) {
+            positions[key] = nil; lastSent[key] = nil; remainder[key] = nil; commandStamps["position:" + key] = nil
+        }
+        for key in flipped.keys.filter({ $0.hasSuffix(suffix) }) { flipped[key] = nil; commandStamps["flag:" + key] = nil }
+        if waveformPad == pad { wave = nil; waveOwner = nil }
+        undoPreview = .pad(pad, before); redoPreview = nil
+        say("DELETE \(Self.padID(pad)) · CONFIRM IN KOALA IF ASKED · UNDO TO RESTORE", seconds: 6)
     }
     private func button(_ cc: Int, down: Bool) {
         if down { guard pressedButtons.insert(cc).inserted else { return } }
@@ -812,28 +1280,21 @@ final class KoalaController {
         case Push2Button.doubleLoop: shift ? tap("/currSequence/numBars/--", "BARS −") : tap("/currSequence/numBars/*2", "SEQUENCE × 2")
         case Push2Button.delete:
             if shift { tap("/delete", "DELETE"); return }
-            // Hold a pad, then DELETE. Over the link the delete names the held pad (on Koala's SAMPLE page; on its
-            // SEQUENCE page the same command clears something else). Without it Koala clears its selected pad, so only
-            // when that's the pad held.
+            // One deliberately held sample pad is the entire delete target.
             let held = heldPads.keys.sorted().map { Push2Protocol.koalaPad(forPush: $0) }
             if keyboard != .off { say("TURN KEYBOARD OFF TO CLEAR A PAD") }
             else if held.isEmpty { say("HOLD A PAD, THEN PRESS DELETE TO CLEAR IT") }
-            else if link, let pad = held.first {
-                guard koalaPage == .sample else { say("GO TO THE PAD PAGE (KOALA'S SAMPLE PAGE) TO CLEAR A PAD"); return }
-                linkSend([KoalaFeedbackProtocol.delete, UInt8(pad / 16), UInt8(pad % 16)])
-                say("CLEARED \(Self.padID(pad)) · UNDO BRINGS IT BACK", seconds: 4)
-            }
-            else if !held.contains(selected) { say("KOALA'S SELECTED PAD IS \(Self.padID(selected)): PICK THE PAD ON KOALA'S SCREEN FIRST", seconds: 4) }
-            else { tap("/currPad/delete", "CLEARED \(Self.padID(selected)) · UNDO BRINGS IT BACK") }
+            else if held.count != 1 { say("HOLD JUST ONE SAMPLE PAD TO DELETE IT") }
+            else if let pad = held.first { deleteSample(pad) }
         case Push2Button.mute: flip("/mute/toggle", "mute#\(selected)", muted, "MUTE")
         case Push2Button.browse: shift ? tap("/export/toggle", "EXPORT") : tap("/load/toggle", "LOAD")
         case Push2Button.select: shift ? tap("/escape", "BACK") : tap("/edit", "EDIT")
         case Push2Button.accent: fullLevel.toggle(); say(fullLevel ? "FULL LEVEL · VELOCITY 127" : "NATURAL PAD VELOCITY")
         case Push2Button.stop:
             if playing { tap("/sequencer/play/toggle", "STOP") }
-            localPlaying = false; releaseAll(); macroPlaying = false
+            setPlaying(false); releaseAll(); macroPlaying = false
         case Push2Button.master: show(.mixer); touched = 4; say("MASTER VOLUME · MASTER ENCODER")
-        case Push2Button.layout: detailView.toggle(); say(detailView ? "DETAIL VIEW · SAVED WAVEFORM / NOTES" : "EIGHT ENCODER VIEW")
+        case Push2Button.layout: detailView.toggle(); say(detailView ? "DETAIL VIEW · WAVEFORM / PATTERN" : "EIGHT ENCODER VIEW")
         case Push2Button.pageLeft: movePage(-1)
         case Push2Button.pageRight: movePage(1)
         case Push2Button.repeatButton: repeatEnabled.toggle(); nextRepeat = now(); say(repeatEnabled ? "REPEAT · HELD PADS · 1/16" : "REPEAT OFF")
@@ -843,7 +1304,7 @@ final class KoalaController {
         case Push2Button.addTrack: show(.mixer); say("MIXER · BUSES A–D · HOLD SOLO FOR SOLO KEYS")
         case Push2Button.new:
             if let empty = session.notes.indices.first(where: { session.notes[$0].isEmpty && $0 != sequence }) {
-                tap(KoalaPushProfile.sequenceAddress(empty), "EMPTY SEQUENCE \(empty + 1)"); sequencePicked = empty; show(.seq)
+                tap(KoalaPushProfile.sequenceAddress(empty), "EMPTY SEQUENCE \(empty + 1)"); sequencePicked = empty; markCommand("sequenceSelection"); show(.seq)
             } else { show(.seq); say("NO SAVED EMPTY SEQUENCE · SHIFT + LOWER 8 CLEARS CURRENT") }
         case Push2Button.duplicate: tap("/currSequence/numBars/*2", "SEQUENCE × 2"); show(.seq)
         case Push2Button.fixedLength:
@@ -851,7 +1312,9 @@ final class KoalaController {
         case Push2Button.automate: toggleMacro()
         case Push2Button.setup: tap("/settings/toggle", "SETTINGS")
         case Push2Button.device: show(.pad)
-        case Push2Button.session: show(.fx)
+        case Push2Button.session:
+            if shift { tap("/perform/hold/toggle", "FX HOLD") }
+            else { show(.fx) }
         case Push2Button.mix: show(.mixer)
         case Push2Button.clip: show(.seq)
         case Push2Button.left: show(Page(rawValue: (page.rawValue + Page.allCases.count - 1) % Page.allCases.count)!)
@@ -882,6 +1345,7 @@ final class KoalaController {
     }
     /// Lets go of everything held (the Push is given up, or Koala quit).
     func releaseAll() {
+        finishRecordingHolds()
         macroRecording = false; macroPlaying = false
         for off in heldPads.values { send(off) }
         for off in heldButtons.values { send(off) }
@@ -907,25 +1371,48 @@ final class KoalaController {
     /// Called by the companion's main timer; input still goes directly to MIDI.
     func tick() {
         let time = now()
+        reconcileTrims(at: time)
+        reconcileCommands()
         if repeatEnabled, time >= nextRepeat {
             nextRepeat = max(nextRepeat + 60 / max(20, bpm ?? 120) / 4, time + 0.002)
             var retriggered = Set<[UInt8]>()
-            for index in heldPadOns.keys.sorted() {
-                if let on = heldPadOns[index], let off = heldPads[index], retriggered.insert(off).inserted { send(off); send(on) }
+            // Repeat the current editing pad last when it is still held, so
+            // MIDI selection ends on it. Releases retain their original notes.
+            let order = heldPadOns.keys.sorted {
+                let a = keyboard == .off && Push2Protocol.koalaPad(forPush: $0) == selected ? 1 : 0
+                let b = keyboard == .off && Push2Protocol.koalaPad(forPush: $1) == selected ? 1 : 0
+                return (a, $0) < (b, $1)
+            }
+            for index in order {
+                guard let on = heldPadOns[index], let off = heldPads[index], retriggered.insert(off).inserted else { continue }
+                // A pad held before entering keyboard mode must not retrigger
+                // its sample-selection mapping and move the Chopper source.
+                let channel = keyboard == .off ? 16 : keyboardChannel
+                guard Int(on[0] & 0x0F) + 1 == channel else { continue }
+                send(off); send(on)
+                finishRecording(index); beginRecording(index, velocity: on[2])
+                if keyboard == .off, padsSelectInKoala {
+                    selected = Push2Protocol.koalaPad(forPush: index); auditionPad = selected; selectionRevision &+= 1
+                    markCommand("selection")
+                }
             }
         }
         if macroRecording, time - macroStarted >= 30 { toggleMacro() }
         guard macroPlaying else { return }
         guard selected == macroPad else { macroPlaying = false; say("CC MACRO STOPPED · SELECTED PAD CHANGED"); return }
         let elapsed = time - macroStarted
+        invalidateUndoPreview()
         applyingMacro = true
         while macroCursor < macro.count, macro[macroCursor].time <= elapsed {
             let bytes = macro[macroCursor].bytes; send(bytes)
             for (address, key) in Self.table where key.type == "cc" && key.channel == Int(bytes[0] & 0x0F) + 1 && key.value == Int(bytes[1]) {
                 positions[memoryKey(address)] = Double(bytes[2]); lastSent[memoryKey(address)] = Int(bytes[2])
+                recordTrim(address, value: Int(bytes[2]))
+                if !Self.isTrim(address) { markCommand("position:" + memoryKey(address)) }
             }
             for i in session.fx.indices where Self.table[KoalaPushProfile.fxAddress(session.fx[i])]?.value == Int(bytes[1]) && bytes[0] == 0xBD {
                 fxOn[i] = bytes[2] > 0 ? Int(bytes[2]) : nil
+                markCommand("fx:\(i)")
             }
             macroCursor += 1
         }
@@ -936,10 +1423,33 @@ final class KoalaController {
     // MARK: What the Push shows
     func view() -> KoalaView {
         var v = KoalaView()
-        v.page = page.rawValue; v.wave = page == .pad && detailView ? wave : nil
+        v.page = page.rawValue; v.wave = page == .pad && detailView && padInfo(waveformPad).loaded ? wave : nil
+        if var displayed = v.wave, waveOwner?.pad == waveformPad, let trim = pendingTrims[waveformPad] {
+            displayed.start = trim.start / trim.frames; displayed.end = trim.end / trim.frames
+            v.wave = displayed
+        }
         if page == .seq, detailView, session.notes.indices.contains(sequence) {
-            v.pianoRoll = keyboard != .off
-            v.notes = session.notes[sequence].filter { v.pianoRoll ? $0.pad == selected : $0.pad / 16 == selected / 16 }; v.sequenceBeats = Double((session.bars.indices.contains(sequence) ? session.bars[sequence] : 1) * session.beatsPerBar)
+            v.pianoRoll = pianoRoll
+            let preview = sequencePreview(sequence)
+            var notes = preview.notes
+            for held in recordedHolds.values where held.sequence == sequence {
+                var note = held.note
+                note.length = max(1.0 / 4096, transportBeat - recordingStartsAt - held.started)
+                // An autosave may already include a held note. Draw its live
+                // preview once, keeping the exact saved note after release.
+                notes.removeAll { $0.pad == note.pad && $0.pitch == note.pitch && $0.slice == note.slice && abs($0.beat - note.beat) < 0.125 }
+                notes.append(note)
+            }
+            v.notes = notes.filter { v.pianoRoll ? $0.pad == selected : $0.pad / 16 == selected / 16 }
+            v.sequenceBeats = Double(preview.bars * beatsPerBar)
+            v.localPattern = sequencePreviews[sequence] != nil || recordedHolds.values.contains { $0.sequence == sequence }
+            if playing { v.playhead = max(0, transportBeat - recordingStartsAt).truncatingRemainder(dividingBy: max(1, v.sequenceBeats)) }
+            v.clockLive = clockIsLive
+            // Notes currently under the fingers glow even without recording.
+            v.activePads = Set(heldPads.keys.map { Push2Protocol.koalaPad(forPush: $0) })
+            if case .on = keyboard {
+                v.activePitches = Set(heldPadOns.values.filter { Int($0[0] & 0x0F) + 1 == keyboardChannel }.map { Double(Int($0[1]) - 60) })
+            }
         }
         let t = now()
         v.upper = Self.upperLabels
@@ -952,26 +1462,30 @@ final class KoalaController {
         // The header shows the pad the page edits: the keyboard pad, Koala's selected pad (EQ, through the map), or the
         // pad being edited (over the link, the last one hit).
         let pad: Int
-        if case .on(let p) = keyboard { pad = p } else { pad = page == .eq ? selected : editPad }
+        if case .on(let p) = keyboard { pad = p } else { pad = page == .pad ? waveformPad : page == .eq ? selected : editPad }
         v.bank = pad / 16
         v.pad = Self.padID(pad)
         let info = padInfo(pad)
         v.padName = !info.loaded ? "EMPTY" : info.label.isEmpty ? "—" : info.label
         var status: [String] = []
         if playing {
-            let beats = max(1, session.beatsPerBar), beat = ticks / 24
-            status.append(transport == .running ? "▶ \(beat / beats + 1).\(beat % beats + 1)" : "▶ PLAYING")
+            let beats = beatsPerBar, beat = Int(max(0, transportBeat - recordingStartsAt))
+            status.append("▶ \(beat / beats + 1).\(beat % beats + 1)" + (clockIsLive ? "" : " LOCAL"))
         } else if transport == .stopped { status.append("■ STOPPED") }
+        if localRecording { status.append(transportBeat < recordingStartsAt ? "COUNT IN" : "REC LOCAL") }
         status.append("SEQ \(sequence + 1)")
         if let bpm { status.append(String(format: "%.1f BPM", bpm)) }
         status.append(link ? "LINK" : "SAVED / LOCAL")
         if fullLevel { status.append("FULL") }
         if repeatEnabled { status.append("1/16") }
+        if page == .fx, state("fxHold", session.fxHold) { status.append("HOLD") }
         if macroRecording { status.append("MACRO REC") } else if macroPlaying { status.append("MACRO LOOP") }
         v.status = status.joined(separator: " · ")
         switch keyboard {
         case .off where link && page == .eq: v.mode = "EQ EDITS KOALA'S SELECTED PAD \(Self.padID(selected))"
         case .off where link: v.mode = "PADS: A–D · EDITING \(Self.padID(editPad))" + (editPad != selected ? " · * = KOALA'S \(Self.padID(selected))" : "")
+        case .off where page == .pad && waveformPad != editPad:
+            v.mode = "WAVE \(Self.padID(waveformPad)) · * CONTROLS EDIT \(Self.padID(editPad)) IN KOALA"
         case .off: v.mode = "PADS: A–D · \(Self.padID(selected)) SELECTED IN KOALA"
         case .choosing: v.mode = "KEYBOARD: CHOOSING A PAD"
         case .on(let p):
@@ -1001,7 +1515,7 @@ final class KoalaController {
                 let level: Double?
                 if case .relative = knob.kind { level = nil } else { level = p.map { $0 / 127 } }
                 // Over the link, a PAD page knob that still acts on Koala's selected pad (START, LENGTH) is marked *.
-                let mark = link && page == .pad && knob.address.hasPrefix("/currPad/") && Self.linkKnobs[knob.address] == nil && editPad != selected
+                let mark = page == .pad && knob.address.hasPrefix("/currPad/") && waveformPad != padFor(knob.address)
                 return KoalaView.Cell(name: knob.name + (mark ? "*" : ""), value: knobText(knob), level: level, centred: centred, lit: touched == i)
             }
         }
@@ -1037,12 +1551,14 @@ final class KoalaController {
             // Koala's banks: bright = a sound, dim = empty; the pad being edited cream; white while held. Over the link
             // "a sound" is Koala's own pad light on its SAMPLE page (01 = empty), so a new recording shows at once.
             return (0..<64).map { index in
-                if heldPads[index] != nil { return Push2Color.hit.rawValue }
                 let pad = Push2Protocol.koalaPad(forPush: index)
+                if deletedPads.contains(pad) { return Push2Color.koala(pad / 16, dim: true).rawValue }
+                if heldPads[index] != nil { return Push2Color.hit.rawValue }
                 if pad == editPad { return Push2Color.selected.rawValue }
                 let loaded: Bool
-                if link, koalaPage == .sample, let state = padStates[pad], state != 0 { loaded = state != 0x01 }
-                else { loaded = session.pads[pad]?.loaded == true }
+                if deletedPads.contains(pad) { loaded = false }
+                else if link, koalaPage == .sample, let state = padStates[pad], state != 0 { loaded = state != 0x01 }
+                else { loaded = padInfo(pad).loaded }
                 return Push2Color.koala(pad / 16, dim: !loaded).rawValue
             }
         }
@@ -1072,7 +1588,7 @@ final class KoalaController {
         // Koala's record light, over the link.
         out[Push2Button.record] = (link ? leds[KoalaFeedbackProtocol.recPattern] == KoalaFeedbackProtocol.pressed : localRecording) ? Push2Color.accent.rawValue : Push2Color.accentDim.rawValue
         out[Push2Button.mute] = muted ? Push2Color.koalaD.rawValue : Push2Color.koalaDimD.rawValue
-        out[Push2Button.solo] = soloHeld ? Push2Color.koalaC.rawValue : Push2Color.koalaDimC.rawValue
+        out[Push2Button.solo] = soloHeld || state("sampleSolo", false) ? Push2Color.koalaC.rawValue : Push2Color.koalaDimC.rawValue
         out[Push2Button.shift] = white(shift)
         out[Push2Button.note] = white(keyboard != .off)
         out[Push2Button.delete] = keyboard == .off && !heldPads.isEmpty ? 127 : 16
@@ -1086,6 +1602,8 @@ final class KoalaController {
                    Push2Button.browse, Push2Button.setup, Push2Button.left, Push2Button.right, Push2Button.select, Push2Button.accent] {
             out[cc] = 16
         }
+        out[Push2Button.metronome] = white(state("metro", false))
+        out[Push2Button.quantize] = white(quantizing)
         var levels = false
         if case .on(let p) = keyboard, chops(p) == 0 { levels = true }
         out[Push2Button.octaveUp] = levels && keyboardOffset + octave + 63 < 127 ? 48 : 0
@@ -1113,6 +1631,9 @@ struct KoalaView: Equatable {
     var notes: [KoalaSession.Note]? = nil
     var sequenceBeats = 4.0
     var pianoRoll = false
+    var localPattern = false, clockLive = false
+    var playhead: Double?
+    var activePads = Set<Int>(), activePitches = Set<Double>()
     /// One of the eight columns over the encoders: a knob, or an effect.
     struct Cell: Equatable {
         var name = "", value = "", level: Double?, centred = false, on = false, lit = false
@@ -1175,6 +1696,11 @@ enum KoalaScreenArt {
         } else if let wave = v.wave {
             let rect = NSRect(x: 8, y: 52, width: 944, height: 34)
             fill(rect, KoalaLook.grey.withAlphaComponent(0.35), radius: 3)
+            let start = max(0, min(1, wave.start)), end = max(start, min(1, wave.end))
+            if end > start {
+                fill(NSRect(x: rect.minX + CGFloat(start) * rect.width, y: rect.minY,
+                            width: CGFloat(end - start) * rect.width, height: rect.height), pink.withAlphaComponent(0.2))
+            }
             blue.setStroke(); let path = NSBezierPath(); path.lineWidth = 1
             for (i, peak) in wave.peaks.enumerated() {
                 let x = rect.minX + CGFloat(i) / CGFloat(max(1, wave.peaks.count - 1)) * rect.width
@@ -1205,9 +1731,15 @@ enum KoalaScreenArt {
                 let x = rect.minX + CGFloat(note.beat / max(1, v.sequenceBeats)) * rect.width
                 let width = max(3, CGFloat(note.length / max(1, v.sequenceBeats)) * rect.width)
                 let y = rect.minY + (v.pianoRoll ? CGFloat((note.pitch - minPitch) / (maxPitch - minPitch + 1)) * rect.height : CGFloat(note.pad % 16) * rect.height / 16)
-                fill(NSRect(x: x, y: y, width: min(width, max(0, rect.maxX - x)), height: v.pianoRoll ? 3.5 : 2.5), note.pad / 16 == v.bank ? pink : blue, radius: 1)
+                let active = v.pianoRoll ? v.activePitches.contains(note.pitch) : v.activePads.contains(note.pad)
+                fill(NSRect(x: x, y: y, width: min(width, max(0, rect.maxX - x)), height: v.pianoRoll ? 3.5 : 2.5), active ? white : note.pad / 16 == v.bank ? pink : blue, radius: 1)
             }
-            text(v.pianoRoll ? "SAVED PIANO · LAYOUT: ENCODERS" : "BANK \(["A", "B", "C", "D"][v.bank]) · SAVED PATTERN · LAYOUT: ENCODERS", NSRect(x: 650, y: 70, width: 300, height: 14), size: 10, color: white, align: .right)
+            if let beat = v.playhead {
+                let x = rect.minX + CGFloat(beat / max(1, v.sequenceBeats)) * rect.width
+                fill(NSRect(x: x, y: rect.minY, width: 2, height: rect.height), v.clockLive ? white : blue)
+            }
+            let source = v.localPattern ? "LOCAL PREVIEW" : "SAVED"
+            text(v.pianoRoll ? "\(source) PIANO · LAYOUT: ENCODERS" : "BANK \(["A", "B", "C", "D"][v.bank]) · \(source) PATTERN", NSRect(x: 610, y: 70, width: 340, height: 14), size: 10, color: white, align: .right)
         } else {
             // The eight encoders: name, value, and a bar (from the middle for ± values).
             for (i, c) in v.cells.enumerated() where !c.name.isEmpty {

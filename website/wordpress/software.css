@@ -1,0 +1,98 @@
+.savi-software-page { width:min(1280px,calc(100% - 32px)); margin:16px auto 40px; border:1px solid var(--savi-border); border-radius:8px; overflow:hidden; background:var(--savi-case); color:var(--savi-ink)!important; font-family:var(--savi-sans); -webkit-font-smoothing:antialiased; }
+.savi-software-page *, .savi-software-page *::before, .savi-software-page *::after { box-sizing:border-box; }
+.savi-software-view .savi-player-bar { display:none!important; }
+.savi-software-page [hidden] { display:none!important; }
+/* Legacy theme rules set p/li/table text to cream directly. Use the active
+   skin's ink on the software page rather than inheriting those old colours. */
+.savi-software-page :is(p,li,td,th) { color:var(--savi-ink); }
+.savi-software-page p { line-height:1.65; margin:0 0 16px; max-width:65ch; }
+.savi-software-page ::selection { background:var(--savi-focus); color:var(--savi-case-light); }
+.savi-software-page h1,.savi-software-page h2,.savi-software-page h3 { margin:0; letter-spacing:-.045em; line-height:1.08; color:var(--savi-ink)!important; font-family:var(--savi-sans)!important; }
+.savi-software-page a { color:inherit!important; }
+.savi-software-page a:focus-visible,.savi-software-page button:focus-visible,.savi-software-page input:focus-visible,.savi-software-page select:focus-visible,.savi-software-page summary:focus-visible { outline:3px solid var(--savi-focus); outline-offset:4px; }
+.savi-software-page :target { scroll-margin-top:24px; }
+.savi-software-topline,.savi-software-product-head,.savi-software-eyebrow,.savi-software-display-label,.savi-software-tag,.savi-software-release,.savi-software-number { font-family:var(--savi-mono); font-variant-numeric:tabular-nums; }
+.savi-software-topline,.savi-software-product-head { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:8px 24px; font-size:12px; font-weight:600; letter-spacing:.065em; }
+.savi-software-topline { padding:16px 32px; border-bottom:1px solid var(--savi-border); background:var(--savi-case-light); }
+.savi-software-topline a { min-height:40px; display:inline-flex; align-items:center; text-decoration:none; }
+.savi-software-intro { padding:56px 48px 48px; display:grid; grid-template-columns:1.5fr 1fr; gap:40px; align-items:end; }
+.savi-software-intro h1 { font-size:clamp(36px,4.3vw,60px); }
+.savi-software-intro>p { margin:0; color:var(--savi-ink-soft); font-size:18px; max-width:34ch; }
+.savi-software-eyebrow { font-size:12px; letter-spacing:.06em; font-weight:600; text-transform:uppercase; }
+.savi-software-intro .savi-software-eyebrow { margin-bottom:20px; }
+.savi-software-product { margin:0 24px; border:1px solid var(--savi-border); border-radius:4px; background:var(--savi-case-light); }
+.savi-software-product-head { padding:16px 24px; border-bottom:1px solid var(--savi-border); }
+.savi-software-product-grid { display:grid; grid-template-columns:1fr 1.15fr; gap:40px; padding:40px 24px; align-items:center; }
+.savi-software-product-copy h2 { font-size:clamp(44px,5.5vw,76px); margin-bottom:20px; }
+.savi-software-product-copy .savi-software-product-lede { font-size:24px; line-height:1.2; letter-spacing:-.03em; margin-bottom:24px; }
+.savi-software-product-copy>p { font-size:16px; }
+.savi-software-actions { display:flex; flex-direction:column; align-items:flex-start; gap:12px; margin:24px 0 12px; }
+.savi-software-button { min-height:48px; padding:12px 18px; border:1px solid var(--savi-border)!important; border-radius:3px!important; display:inline-flex; align-items:center; justify-content:center; gap:16px; background:var(--savi-case-light)!important; color:var(--savi-ink)!important; font-family:var(--savi-sans)!important; font-size:15px!important; font-weight:600!important; line-height:1.4; text-decoration:none!important; text-align:center; cursor:pointer; transition:background-color 150ms ease,border-color 150ms ease; }
+body .savi-software-button.is-primary { background:var(--savi-panel-dark)!important; color:var(--savi-panel-text)!important; border-color:var(--savi-panel-dark)!important; }
+body .savi-software-button.is-primary:hover { background:var(--savi-ink-soft)!important; }
+.savi-software-button:hover { border-color:var(--savi-ink)!important; background:var(--savi-case-dark)!important; }
+.savi-software-button:disabled { opacity:.65; cursor:wait; }
+.savi-software-text-link { display:inline-flex; align-items:center; min-height:44px; text-decoration:underline!important; text-underline-offset:4px; font-size:14px; font-weight:600; }
+.savi-software-product-copy .savi-software-release { font-size:12px; color:var(--savi-ink-soft); margin-bottom:8px; }
+.savi-software-page .savi-software-small { font-size:13px; color:var(--savi-ink-soft); line-height:1.6; }
+.savi-software-app-figure { margin:0; min-width:0; background:var(--savi-panel-dark); border-radius:4px; padding:12px; }
+.savi-software-display-label { color:var(--savi-panel-text); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:10px; letter-spacing:.04em; padding:0 0 12px; }
+.savi-software-app-figure img { display:block; width:100%; height:auto; border-radius:2px; }
+.savi-software-app-figure figcaption { color:var(--savi-panel-text); font-size:12px; line-height:1.6; padding:12px 0 0; }
+.savi-software-features { border-top:1px solid var(--savi-border); display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+.savi-software-features>div { padding:28px 24px; }
+.savi-software-features>div+div { border-left:1px solid var(--savi-border); }
+.savi-software-features>div>span { font:600 12px var(--savi-mono); letter-spacing:.08em; color:var(--savi-ink-soft); }
+.savi-software-features h3 { font-size:20px; margin:12px 0; }
+.savi-software-features p { font-size:14px; margin:0; color:var(--savi-ink-soft); }
+.savi-software-updates { display:grid; grid-template-columns:1fr 1fr; gap:64px; padding:64px 48px; border-bottom:1px solid var(--savi-border); align-items:start; }
+.savi-software-updates h2 { font-size:clamp(32px,4vw,48px); margin-bottom:24px; }
+.savi-software-updates-copy { padding-top:4px; }
+.savi-software-form-wrap { padding:24px; background:var(--savi-case-light); border:1px solid var(--savi-border); border-radius:4px; }
+.savi-software-field { margin-bottom:16px; }
+.savi-software-field label { display:block; font-size:14px; font-weight:600; margin-bottom:8px; color:var(--savi-ink)!important; }
+.savi-software-field label span { font-size:12px; font-weight:400; color:var(--savi-ink-soft); }
+body .savi-software-field input,body .savi-software-field select { display:block; width:100%; min-height:48px; padding:12px; background:var(--savi-case)!important; color:var(--savi-ink)!important; border:1px solid var(--savi-border)!important; border-radius:3px; font:16px var(--savi-sans); }
+.savi-software-field input::placeholder { color:var(--savi-ink-soft); opacity:1; }
+.savi-software-consent { color:var(--savi-ink)!important; display:flex; align-items:flex-start; gap:12px; font-size:14px; line-height:1.5; padding:4px 0 16px; cursor:pointer; }
+.savi-software-consent input { flex:0 0 20px; width:20px; height:20px; margin:1px 0; accent-color:var(--savi-panel-dark); }
+.savi-software-form-wrap .savi-software-button { width:100%; }
+.savi-software-form-wrap .savi-software-small { margin:16px 0 0; }
+.savi-software-form-wrap .savi-software-small a { text-decoration:underline; text-underline-offset:3px; }
+.savi-software-trap { position:absolute!important; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); clip-path:inset(50%); }
+.savi-software-form-status:empty { display:none; }
+.savi-software-form-status.is-error { margin:16px 0 0; padding:12px; border-left:3px solid var(--savi-signal); color:var(--savi-ink); font-size:14px; }
+.savi-software-success h3 { font-size:28px; margin-bottom:16px; }
+.savi-software-success:focus,.savi-software-form-status:focus { outline:none; }
+.savi-software-success .savi-software-text-link { margin-top:12px; }
+.savi-software-push { padding:48px; border-bottom:1px solid var(--savi-border); }
+.savi-software-section-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.savi-software-section-heading p { margin:0; }
+.savi-software-tag { font-size:11px; border:1px solid var(--savi-border); padding:6px 10px; border-radius:2px; letter-spacing:.06em; }
+.savi-software-push-copy { display:grid; grid-template-columns:1fr 1fr; gap:64px; align-items:start; margin:24px 0 32px; }
+.savi-software-push-copy h2 { font-size:clamp(30px,3.5vw,42px); }
+.savi-software-push-copy p { margin:0; }
+.savi-software-push-screen { margin:0 0 24px; }
+.savi-software-push-screen img { width:100%; height:auto; display:block; border:12px solid var(--savi-panel-dark); border-radius:4px; }
+.savi-software-push-screen figcaption { margin-top:12px; font-size:13px; line-height:1.6; color:var(--savi-ink-soft); }
+.savi-software-push-bottom { display:flex; align-items:flex-start; gap:32px; justify-content:space-between; }
+.savi-software-push-bottom p { font-size:14px; color:var(--savi-ink-soft); max-width:72ch; }
+.savi-software-push-bottom .savi-software-button { flex-shrink:0; }
+.savi-software-details { display:grid; grid-template-columns:1fr 1.2fr; gap:64px; padding:48px; border-bottom:1px solid var(--savi-border); }
+.savi-software-details h2 { font-size:32px; }
+.savi-software-detail-list details { border-top:1px solid var(--savi-border); }
+.savi-software-detail-list details:last-child { border-bottom:1px solid var(--savi-border); }
+.savi-software-detail-list summary { cursor:pointer; min-height:56px; padding:16px 4px; font-size:16px; font-weight:600; }
+.savi-software-detail-list details>div { padding:0 4px 20px; font-size:14px; color:var(--savi-ink-soft); }
+.savi-software-detail-list ol { padding-left:24px; line-height:1.8; margin:0 0 16px; }
+.savi-software-detail-list li { color:inherit; }
+.savi-software-detail-list a { text-decoration:underline!important; text-underline-offset:3px; }
+.savi-software-next { display:flex; justify-content:space-between; align-items:center; gap:40px; padding:48px; background:var(--savi-case-dark); }
+.savi-software-next h2 { font-size:36px; margin-bottom:16px; }
+.savi-software-next p:last-child { margin:0; }
+.savi-software-next .savi-software-button { flex-shrink:0; }
+@media(min-width:768px) { .savi-software-page .savi-software-intro { min-height:284px; } }
+@media(max-width:960px) { .savi-software-intro,.savi-software-updates,.savi-software-push-copy,.savi-software-details { gap:32px; } .savi-software-product-grid { grid-template-columns:1fr; } .savi-software-app-figure { max-width:680px; } .savi-software-push-bottom { flex-direction:column; gap:8px; } }
+@media(max-width:767px) { .savi-software-intro,.savi-software-updates,.savi-software-push-copy,.savi-software-details { grid-template-columns:1fr; } .savi-software-intro,.savi-software-updates,.savi-software-push,.savi-software-details,.savi-software-next { padding:32px 24px; } .savi-software-intro>p { max-width:50ch; } .savi-software-features { grid-template-columns:1fr; } .savi-software-features>div+div { border-left:0; border-top:1px solid var(--savi-border); } .savi-software-next { flex-direction:column; align-items:flex-start; gap:24px; } .savi-software-product { margin:0 16px; } .savi-software-product-grid { padding:28px 20px; gap:28px; } .savi-software-product-head { padding:16px 20px; } .savi-software-topline { padding:12px 24px; } .savi-software-form-wrap { padding:20px; } }
+@media(max-width:480px) { .savi-software-page { width:calc(100% - 18px); } .savi-software-intro,.savi-software-updates,.savi-software-push,.savi-software-details,.savi-software-next { padding:28px 20px; } .savi-software-topline { font-size:11px; padding:12px 20px; } .savi-software-product-head { font-size:10px; } .savi-software-product-copy h2 { font-size:44px; } .savi-software-product-copy .savi-software-product-lede { font-size:22px; } .savi-software-actions { align-items:stretch; } .savi-software-button { width:100%; } .savi-software-display-label { font-size:9px; } .savi-software-form-wrap { padding:16px; } .savi-software-section-heading { align-items:flex-start; } .savi-software-push-screen img { border-width:6px; } }
+@media(prefers-reduced-motion:reduce) { .savi-software-page { scroll-behavior:auto; } .savi-software-button { transition:none; } }
