@@ -25,6 +25,7 @@ echo savi_software_brand_head_markup(ob_get_clean());
                 <p>Connect Koala Sampler for Mac to MPC Touch or Ableton Push 2. Play samples, work with chops and shape your sound from the hardware. Choose your controller when Koala Link opens.</p>
                 <div class="savi-software-actions">
                     <a class="savi-software-button is-primary" href="<?php echo esc_url($downloads['stable']); ?>" download>Download for MPC Touch <span aria-hidden="true">↓</span></a>
+                    <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link">View source on GitHub <span aria-hidden="true">↗</span></a>
                     <a class="savi-software-text-link" href="#push-preview">Explore Push 2 preview →</a>
                 </div>
                 <p class="savi-software-release"><span>v1.4.5 · MPC Touch release</span> · Apple silicon · macOS 13+</p>
