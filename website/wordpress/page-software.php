@@ -28,11 +28,11 @@ echo savi_software_brand_head_markup(ob_get_clean());
                     <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link">View source on GitHub <span aria-hidden="true">↗</span></a>
                     <a class="savi-software-text-link" href="#push-preview">Explore Push 2 preview →</a>
                 </div>
-                <p class="savi-software-release"><span>v1.4.5 · MPC Touch release</span> · Apple silicon · macOS 13+</p>
-                <p class="savi-software-small">One installer includes the app and touchscreen driver. Requires Koala Sampler (sold separately) and DisplayLink Manager. Email signup is optional.</p>
+                <p class="savi-software-release"><span>v1.4.6 · MPC Touch release</span> · Apple silicon · macOS 13+</p>
+                <p class="savi-software-small">One installer includes the app, touchscreen driver and automatic MIDI mappings for MPC Touch and Push 2. Requires Koala Sampler (sold separately) and DisplayLink Manager. Email signup is optional.</p>
             </div>
             <figure class="savi-software-app-figure">
-                <div class="savi-software-display-label"><span>KOALA LINK / CONTROLLER SELECT</span><span>VERSION 1.4.5</span></div>
+                <div class="savi-software-display-label"><span>KOALA LINK / CONTROLLER SELECT</span><span>VERSION 1.4.6</span></div>
                 <img src="<?php echo esc_url($software_assets . 'Koala-Link-Controller-Choice.png'); ?>" alt="Koala Link's controller picker with MPC Touch and Push 2 options." width="1440" height="760" fetchpriority="high">
                 <figcaption>Choose MPC Touch or Push 2 at launch. Push 2 support is a preview included in the same installer.</figcaption>
             </figure>
@@ -66,7 +66,7 @@ echo savi_software_brand_head_markup(ob_get_clean());
             </form>
             <div id="savi-software-success" class="savi-software-success" role="status" tabindex="-1" <?php echo $signup_complete ? '' : 'hidden'; ?>>
                 <p class="savi-software-eyebrow">SAV LAB / SIGNUP SAVED</p><h3>You’re on the list.</h3><p>Koala Link is ready to download. We’ll use your signup for SAV LAB software updates and future product news.</p>
-                <a class="savi-software-button is-primary" href="<?php echo esc_url($downloads['stable']); ?>" download>Download Koala Link 1.4.5 ↓</a>
+                <a class="savi-software-button is-primary" href="<?php echo esc_url($downloads['stable']); ?>" download>Download Koala Link 1.4.6 ↓</a>
                 <a class="savi-software-text-link" href="#push-preview">Explore the included Push 2 preview →</a>
                 <p class="savi-software-small">Push 2 support is a preview. The latest build adds faster display feedback and sample deletion; complete control validation is ongoing.</p>
             </div>
@@ -77,8 +77,8 @@ echo savi_software_brand_head_markup(ob_get_clean());
         <div class="savi-software-section-heading"><p class="savi-software-eyebrow">SAV LAB / KOALA LINK / NEW CONTROLLER</p><span class="savi-software-tag">PREVIEW</span></div>
         <div class="savi-software-push-copy"><h2 id="push-title">A Koala view on Push 2.</h2><p>Play and select samples from the pads, trim with the encoders, and perform with effects and the touch strip. Custom sample, piano-roll, sequence, EQ and mixer views bring Koala to the Push display.</p></div>
         <figure class="savi-software-push-screen"><img src="<?php echo esc_url($software_assets . 'Koala-Link-1.4.5-Push-Sample.png'); ?>" alt="Rendered Push 2 sample screen with a waveform, sample start and end, pitch and volume controls, and a bank indicator." width="960" height="160" loading="lazy"><figcaption>Sample screen artwork rendered from version 1.4.5. New gestures and full control coverage are still being validated on hardware.</figcaption></figure>
-        <div class="savi-software-push-bottom"><p>The Push 2 preview is included in the same <span class="savi-software-number">1.4.5</span> installer. It adds cached waveforms, immediate trim and sequence feedback, and pad selection for editing. To delete a sample, leave NOTE mode, hold one pad and press DELETE; confirm in Koala if prompted. Recording notes use a local timing preview that settles to Koala’s saved data. Mac edits and new audio still depend on Koala saving; create and edit chops in Koala.</p><a class="savi-software-button" href="<?php echo esc_url($downloads['preview']); ?>" download>Download Koala Link 1.4.5 ↓</a></div>
-        <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link/blob/main/docs/PUSH2-CONTROLS.md">Read the Push 2 controls →</a> · <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link/releases/tag/v1.4.5">What’s new in 1.4.5 →</a>
+        <div class="savi-software-push-bottom"><p>The Push 2 preview is included in the same <span class="savi-software-number">1.4.6</span> installer. It adds cached waveforms, immediate trim and sequence feedback, and pad selection for editing. To delete a sample, leave NOTE mode, hold one pad and press DELETE; confirm in Koala if prompted. Recording notes use a local timing preview that settles to Koala’s saved data. Mac edits and new audio still depend on Koala saving; create and edit chops in Koala.</p><a class="savi-software-button" href="<?php echo esc_url($downloads['preview']); ?>" download>Download Koala Link 1.4.6 ↓</a></div>
+        <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link/blob/main/docs/PUSH2-CONTROLS.md">Read the Push 2 controls →</a> · <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link/releases/tag/v1.4.6">What’s new in 1.4.6 →</a>
     </section>
 
     <section class="savi-software-follow" aria-labelledby="follow-sav-lab-title">
@@ -94,7 +94,7 @@ echo savi_software_brand_head_markup(ob_get_clean());
         <div><p class="savi-software-eyebrow">BEFORE YOUR FIRST SESSION</p><h2 id="setup-title">Install. Connect. Play.</h2></div>
         <div class="savi-software-detail-list">
             <details open><summary>What you need</summary><div><p>An Apple silicon Mac running macOS <span class="savi-software-number">13</span> or later, plus Koala Sampler for Mac.</p><p><strong>MPC Touch:</strong> DisplayLink Manager and Accessibility permission for Koala Link and mpc_touchd.</p><p><strong>Push 2:</strong> A USB connection. Close Ableton Live and Paper Cut while Koala Link uses the Push display.</p></div></details>
-            <details><summary>Installation</summary><div><ol><li>Download the Koala Link installer and run the .pkg file.</li><li>Connect and power your controller, then open Koala Link in Applications.</li><li>Choose MPC Touch or the Push 2 preview. For MPC Touch, allow Accessibility when prompted.</li></ol><p>The app and installer are not notarized. If macOS blocks the download, use Open Anyway in System Settings → Privacy &amp; Security.</p></div></details>
+            <details><summary>Installation</summary><div><ol><li>Download the Koala Link installer and run the .pkg file.</li><li>Connect and power your controller, then open Koala Link in Applications.</li><li>Choose MPC Touch or the Push 2 preview. Koala Link automatically prepares the matching MIDI map; you don’t need to learn each control. For MPC Touch, allow Accessibility when prompted.</li><li>On a new Koala installation, Koala Link opens Koala once to create its settings, then reopens it with the mapping ready. If Koala shows a first-time setup or permission dialog, finish it, quit Koala and choose your controller again.</li></ol><p>The app and installer are not notarized. If macOS blocks the download, use Open Anyway in System Settings → Privacy &amp; Security.</p></div></details>
             <details><summary>Help, release notes and source</summary><div><p><a href="https://github.com/savilionmusic/koala-link">Project and setup guide</a> · <a href="https://github.com/savilionmusic/koala-link/releases">Release notes</a> · <a href="https://github.com/savilionmusic/koala-link/issues">Report an issue</a></p><p>Koala Link is an independent companion app created by Savilion. Koala Sampler, Akai and Ableton are separate products and brands.</p></div></details>
         </div>
     </section>

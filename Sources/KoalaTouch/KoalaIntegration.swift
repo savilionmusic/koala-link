@@ -10,6 +10,9 @@ final class KoalaIntegration {
     private let retryDelay: TimeInterval = 0.35
     /// Whether Koala's window is moved and made fullscreen (needs Accessibility).
     private var placement = true
+    // Attempt native first-run initialization once per Koala Link session. If
+    // Koala needs a welcome/permission dialog, leave that for the user.
+    private static var attemptedInitialLaunch = false
 
     /// `accessibilityOptional`: without Accessibility, Koala still opens (where macOS puts it, not
     /// fullscreen) instead of failing. For Koala on the Mac's display with the Push.
@@ -55,6 +58,25 @@ final class KoalaIntegration {
             return
         }
 
+        let defaultsURL = KoalaPushProfile.settingsFolder.appendingPathComponent("defaults.json")
+        if !FileManager.default.fileExists(atPath: defaultsURL.path) {
+            guard !Self.attemptedInitialLaunch else {
+                completion(.failure(NSError(domain: "KoalaLink.Profile", code: 3, userInfo: [NSLocalizedDescriptionKey: "Finish Koala's first-time setup, quit Koala, then choose your controller again. Koala Link will map it automatically."])))
+                return
+            }
+            Self.attemptedInitialLaunch = true
+            onStatus?("Opening Koala once to create its settings before automatic controller setup…")
+            NSWorkspace.shared.openApplication(at: applicationURL, configuration: NSWorkspace.OpenConfiguration()) { [weak self] application, error in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    guard let application else { completion(.failure(error ?? KoalaIntegrationError.launchFailed)); return }
+                    self.finishInitialLaunch(application, on: screen, accessibilityOptional: accessibilityOptional,
+                                             placeWindow: placeWindow, profileMode: profileMode, attempt: 0, completion: completion)
+                }
+            }
+            return
+        }
+
         do {
             try KoalaMIDIProfile.prepare()
         } catch {
@@ -69,8 +91,33 @@ final class KoalaIntegration {
             PickerLog.write("Koala's MIDI map/settings not set: \(error.localizedDescription)")
             if profileMode == .push2 || !KoalaPushProfile.settingsMatch(mode: profileMode) { completion(.failure(error)); return }
         }
-        onStatus?("Launching Koala…")
+        onStatus?("Controller mapping ready. Launching Koala…")
         launch(applicationURL: applicationURL, targetScreen: display, completion: completion)
+    }
+
+    private func finishInitialLaunch(_ application: NSRunningApplication, on screen: NSScreen,
+                                     accessibilityOptional: Bool, placeWindow: Bool, profileMode: KoalaPushProfile.Mode,
+                                     attempt: Int, completion: @escaping (Result<NSRunningApplication, Error>) -> Void) {
+        // Let Koala create its own preferences. Never invent its audio/device
+        // defaults or force-quit it. The normal quit flushes its settings.
+        if !application.isTerminated && (!application.isFinishedLaunching || nativeWindowFrames(pid: application.processIdentifier).isEmpty) {
+            guard attempt < 100 else {
+                completion(.failure(NSError(domain: "KoalaLink.Profile", code: 4, userInfo: [NSLocalizedDescriptionKey: "Complete Koala's first-time setup and quit it, then choose your controller again. No manual MIDI mapping is needed."])))
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.finishInitialLaunch(application, on: screen, accessibilityOptional: accessibilityOptional,
+                                          placeWindow: placeWindow, profileMode: profileMode, attempt: attempt + 1, completion: completion)
+            }
+            return
+        }
+        guard application.isTerminated || application.terminate() else {
+            completion(.failure(NSError(domain: "KoalaLink.Profile", code: 5, userInfo: [NSLocalizedDescriptionKey: "Quit Koala after finishing its first-time setup, then choose your controller again."])))
+            return
+        }
+        onStatus?("Preparing the selected controller's MIDI mapping…")
+        reopen(after: application, on: screen, accessibilityOptional: accessibilityOptional,
+               placeWindow: placeWindow, profileMode: profileMode, attempt: 0, completion: completion)
     }
 
     private func reopen(after application: NSRunningApplication, on screen: NSScreen, accessibilityOptional: Bool,

@@ -206,7 +206,16 @@ enum KoalaPushProfile {
     static func repairMap(settings: URL, isRunning: () -> Bool) throws -> [String]? {
         let fm = FileManager.default
         let mappingURL = settings.appendingPathComponent("midiMapping.json")
-        guard let old = try? Data(contentsOf: mappingURL), var root = try JSONSerialization.jsonObject(with: old) as? [String: Any] else { return nil }
+        let old = fm.fileExists(atPath: mappingURL.path) ? try Data(contentsOf: mappingURL) : nil
+        var root: [String: Any]
+        if let old {
+            guard let decoded = try JSONSerialization.jsonObject(with: old) as? [String: Any] else {
+                throw failure("Koala's MIDI mapping format could not be read; no mapping changed.")
+            }
+            root = decoded
+        } else {
+            root = ["type": "midiMap", "mappings": []]
+        }
         guard !isRunning() else { throw failure("Save and quit Koala before Koala Link checks its MIDI map.") }
         var list = root["mappings"] as? [[String: Any]] ?? []
         var repaired: [String] = []
@@ -225,8 +234,8 @@ enum KoalaPushProfile {
         root["mappings"] = list
         let backup = settings.deletingLastPathComponent().appendingPathComponent("Koala Touch backups/repair-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: backup, withIntermediateDirectories: true)
-        try old.write(to: backup.appendingPathComponent("midiMapping.json"), options: .atomic)
-        guard !isRunning(), try Data(contentsOf: mappingURL) == old else { throw failure("Koala or its MIDI map changed meanwhile; quit Koala and try again.") }
+        try old?.write(to: backup.appendingPathComponent("midiMapping.json"), options: .atomic)
+        guard !isRunning(), (fm.fileExists(atPath: mappingURL.path) ? try Data(contentsOf: mappingURL) : nil) == old else { throw failure("Koala or its MIDI map changed meanwhile; quit Koala and try again.") }
         try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]).write(to: mappingURL, options: .atomic)
         return repaired
     }

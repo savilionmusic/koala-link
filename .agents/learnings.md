@@ -135,3 +135,10 @@
 - **Source:** inspected current saved audio and Push preview; display-only scaling added in 1.4.1 build 10
 - **Files:** Sources/KoalaTouch/KoalaWaveformReader.swift
 - **Date:** 2026-10-11
+
+## 2026-10-20 · Automatic mappings on a new Koala installation
+
+- **Insight:** Controller maps were already included and applied per user when choosing Touch or Push, rather than by the root package installer. Missing defaults.json or midiMapping.json prevented genuinely new Koala users from reaching setup. Version 1.4.6/build18 opens Koala normally once if native defaults are absent, requests a normal quit, then prepares/reopens the selected profile. Native first-use dialogs remain for the user. Missing maps are created both in the first migration and canonical repair (including with an existing receipt). Existing preferences/maps are backed up.
+- **Evidence:** Production compilation and package expansion confirmed version/build and accepted driver SHA-256 d5f4db8ca9df3b836743a68cd63b3201f60287e0639147437a5091cc4fb881e8 in both locations. No hardware or fresh-Mac execution was performed; installed app remains 1.4.5/build17.
+- **Next:** Confirm first-launch behavior on a fresh macOS user with Koala installed; complete physical Push validation.
+- **Source:** User request and source/package inspection on 2026-10-20.

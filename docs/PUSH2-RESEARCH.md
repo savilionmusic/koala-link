@@ -1,18 +1,20 @@
 # Push 2 implementation and validation
 
-Status updated **2026-10-20** for the current **v1.4.5** release (app version
-1.4.5, build 17). One installer supports MPC Touch and optional Push 2 preview
-use. The user confirmed today that the current app works fine on MPC Touch.
+Status updated **2026-10-20** for the current **v1.4.6** release (app version
+1.4.6, build 18). One installer supports MPC Touch and optional Push 2 preview
+use. The user confirmed today that version 1.4.5 works fine on MPC Touch.
 Push hardware validation remains pending; this release does not claim Push is
 stable or fully validated. The previous **v1.4.5-preview.1** tag is historical
-and contains the same app version/build. The first Push preview,
+and contains the same app version/build as v1.4.5. The first Push preview,
 **1.4.0-preview.1** (app 1.4.0, build 8), had screen artwork rendered and
 visually reviewed offline.
 The first physical Push session occurred later on 2026-10-11: the user reported
 that waveforms appeared slowly, and the runtime log showed the User MIDI and
 USB display connections opening. Full physical validation remains pending.
 
-Build **17**, now distributed on the main **v1.4.5** release, is installed and
+Build **18** adds first-use initialization through Koala itself and missing-map creation for both controllers. It was compiled and packaged; a fresh-Mac and physical hardware run of build 18 has not been performed. The accepted pad/Chopper routing and signed touch driver are unchanged.
+
+Build **17**, distributed on the historical **v1.4.5** release, is installed and
 running. It adds
 tempo and sequence previews, local transport/record indicators, a provisional
 playhead, count-in handling, safer snapshot reconciliation, and a pending

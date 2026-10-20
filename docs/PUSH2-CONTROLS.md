@@ -1,12 +1,14 @@
 # Push 2 controls
 
-These bindings describe the current **v1.4.5** release (app version 1.4.5,
-build 17). The same installer supports MPC Touch and optional Push 2 preview
-use. The user confirmed the current app works fine on MPC Touch on 2026-10-20;
+These bindings describe the current **v1.4.6** release (app version 1.4.6,
+build 18). The same installer supports MPC Touch and optional Push 2 preview
+use. The user confirmed version 1.4.5 works fine on MPC Touch on 2026-10-20;
 this does not establish Push hardware validation. Push remains a preview, and
 new gesture behavior still needs physical validation. The older
 **v1.4.5-preview.1** tag is historical. The original **1.4.0-preview.1** (app
 1.4.0, build 8) was the first Push preview.
+
+Version **1.4.6, build 18** adds first-use Koala initialization and creates missing MIDI maps automatically. Choose Push 2 in Koala Link; no manual MIDI Learn is needed for its standard controls.
 
 Local update **1.4.3, build 15** adds normal Push pad presses that select the
 editing pad immediately. Sample notes remain mapped on channel 16; piano and

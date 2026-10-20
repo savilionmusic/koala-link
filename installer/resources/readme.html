@@ -7,12 +7,13 @@ li { margin: 3px 0; }
 </style></head><body>
 <h2><img src="headings/readme-how.png" width="118" height="27" alt="How it works" aria-hidden="true"><span style="font-size:1px;color:transparent">How it works</span></h2>
 <ul>
-<li>Open <b>Koala Link</b> and choose MPC Touch or Push 2. MPC Touch readies its touch service, sets Koala's MIDI map, and opens Koala full screen on the MPC. Push 2 uses its own display and opens Koala in its ordinary Mac window.</li>
+<li>Open <b>Koala Link</b> and choose MPC Touch or Push 2. If Koala has not been opened before, Koala Link opens it once to create its settings. Complete any welcome or permission dialogs and quit Koala when asked; Koala Link prepares the selected controller's MIDI map and reopens Koala. If setup cannot finish, complete Koala's first-time setup, quit it, then choose the controller again. MPC Touch opens Koala full screen on the MPC; Push 2 uses its own display and Koala's ordinary Mac window.</li>
 <li>The MPC's pads are Koala's pads: bank buttons A–D pick the bank, and the on-screen bank strip follows. The Q-Links set start, length, volume and pitch; REC and PLAY control Koala.</li>
 <li><b>FULL LEVEL</b> toggles maximum pad velocity: light on sends 127 for every hit; light off preserves how hard you play. It works in all four banks, for samples and Chopper notes. MIDI and keyboard velocity are enabled in Koala for this control.</li>
 <li><b>16 LEVELS</b> toggles Chopper keyboard mode: bank A pad 1 plays <b>chop 1</b>, starting at MIDI 60 (Koala's C3). Banks A–D play chops 1–64 using notes 60–75, 76–91, 92–107 and 108–123. With fewer chops, Koala wraps across the available slices; with 128 chops, these banks play the first 64. Chopper mode starts at bank A; press it again to restore your sample bank. Koala Link also follows the restored song's keyboard mode and the on-screen Sequence keyboard button.</li>
 <li>Quit Koala, and Koala Link lets the MPC go and quits too.</li>
 <li>Push 2 preview: its 64 pads play sample banks, 16 Levels or Chopper slices; encoders and the touch strip control the displayed Koala pages. Push 2 has not yet been validated on physical hardware.</li>
+<li>Koala Link maps the standard controller controls automatically; MIDI Learn is not needed. A song-specific MIDI map can override the global assignments.</li>
 </ul>
 <h2><img src="headings/readme-requirements.png" width="87" height="27" alt="Requirements" aria-hidden="true"><span style="font-size:1px;color:transparent">Requirements</span></h2>
 <ul>

@@ -93,10 +93,19 @@ pad release cannot end a Public pad strike.
 
 Koala Link maintains its canonical mappings while Koala is closed and saves
 a backup before writing. Duplicate assignments to an owned address or MIDI
-key are repaired. MIDI Learn can also receive the MPC's raw port; relearning
-automatic controls can replace the translated assignments. Quit and reopen
-Koala Link to restore them. Song-specific MIDI maps can override the global
-map and must be reviewed separately if a particular song behaves differently.
+key are repaired. If Koala has never created its settings, Koala Link opens it
+once for first-time setup; finish any welcome or permission dialogs and quit
+when asked so Koala Link can prepare the selected controller's profile. It
+then reopens Koala. If setup cannot complete, finish Koala's first-time setup,
+quit Koala, and choose the controller again. A missing MIDI map is created
+automatically, including when a previous profile migration receipt exists.
+
+The standard controls described above are mapped automatically; you do not
+need to use Koala MIDI Learn for them. Koala MIDI Learn can also receive the
+MPC's raw port, so learning the same controls by hand can replace the
+translated assignments. Reopen Koala Link to restore its global assignments.
+Song-specific MIDI maps can override the global map, so review a song's own
+map if only that song behaves differently.
 
 ## Protocol reference
 

@@ -1,11 +1,11 @@
 # Savilion Beats software page
 
 Source for [savilionbeats.com/software](https://savilionbeats.com/software/).
-The current release is **v1.4.5** (app 1.4.5, build 17). The same installer
+The current release is **v1.4.6** (app 1.4.6, build 18). The same installer
 supports MPC Touch and optional Push 2 preview use. The user confirmed on
-2026-10-20 that the current app works fine on MPC Touch. Push hardware
+2026-10-20 that version 1.4.5 works fine on MPC Touch. Push hardware
 validation remains pending, so do not describe Push support as fully validated.
-Koala Link is free and email signup is optional.
+Koala Link is free and email signup is optional. Standard controls are mapped automatically after choosing the controller; first-time Koala settings initialization is handled by the app, with guidance for any native setup dialogs.
 
 The page presents **SAV LAB** as Savilion's software brand, using the supplied
 Alicja Hand Bold horizontal wordmark and fonts with terracotta `#A94F39`, cream `#F5EBDD`, and
@@ -35,11 +35,11 @@ the hosting browser-check interstitial on background admin-post requests.
 Upload installers and artwork under
 `wp-content/uploads/software/koala-link/` before changing the page or download
 URLs. Both MPC Touch and Push download keys point to the exact same audited
-installer bytes, named `Koala-Link-1.4.5-Installer.pkg`. The package is
+installer bytes, named `Koala-Link-1.4.6-Installer.pkg`. The package is
 identical to the installer attached to the current main release:
-[v1.4.5](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.5).
-Its audited size is 1,280,912 bytes and SHA-256 is
-`762b4e8208a213b4cf836d3500b6043b145045ab29c8e0b1f99b593b6fa5bcbc`.
+[v1.4.6](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.6).
+Its audited size is 1,287,405 bytes and SHA-256 is
+`0fa3634807a5ffb4cebac53d2e1a5012c75c14c22e341868b5f8020b1b3ef7f8`.
 The older `v1.4.5-preview.1` release tag is historical. The Touch driver is
 bundled; Koala Sampler and DisplayLink Manager are separate prerequisites for
 MPC Touch. Push 2 remains preview-only pending physical validation. The sample

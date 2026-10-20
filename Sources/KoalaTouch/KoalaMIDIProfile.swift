@@ -46,10 +46,18 @@ enum KoalaMIDIProfile {
         let defaultsURL = settings.appendingPathComponent("defaults.json")
         let mappingURL = settings.appendingPathComponent("midiMapping.json")
         let oldDefaults = try Data(contentsOf: defaultsURL)
-        let oldMapping = try Data(contentsOf: mappingURL)
-        guard var defaults = try JSONSerialization.jsonObject(with: oldDefaults) as? [String: Any],
-              let mapping = try JSONSerialization.jsonObject(with: oldMapping) as? [String: Any] else {
+        let oldMapping = fm.fileExists(atPath: mappingURL.path) ? try Data(contentsOf: mappingURL) : nil
+        guard var defaults = try JSONSerialization.jsonObject(with: oldDefaults) as? [String: Any] else {
             throw failure("Koala's settings format could not be read; no settings changed.")
+        }
+        let mapping: [String: Any]
+        if let oldMapping {
+            guard let decoded = try JSONSerialization.jsonObject(with: oldMapping) as? [String: Any] else {
+                throw failure("Koala's MIDI mapping format could not be read; no settings changed.")
+            }
+            mapping = decoded
+        } else {
+            mapping = ["type": "midiMap", "mappings": []]
         }
         var replacement = entries
         let replaced = Set(entries.compactMap { $0["address"] as? String })
@@ -81,10 +89,10 @@ enum KoalaMIDIProfile {
         let backup = settings.deletingLastPathComponent().appendingPathComponent("Koala Touch backups/\(revision)-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: backup, withIntermediateDirectories: true)
         try oldDefaults.write(to: backup.appendingPathComponent("defaults.json"), options: .atomic)
-        try oldMapping.write(to: backup.appendingPathComponent("midiMapping.json"), options: .atomic)
+        try oldMapping?.write(to: backup.appendingPathComponent("midiMapping.json"), options: .atomic)
         try fm.createDirectory(at: receipt.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard !isRunning(), try Data(contentsOf: defaultsURL) == oldDefaults,
-              try Data(contentsOf: mappingURL) == oldMapping else {
+              (fm.fileExists(atPath: mappingURL.path) ? try Data(contentsOf: mappingURL) : nil) == oldMapping else {
             throw failure("Koala or its settings changed during preparation; retry after quitting Koala.")
         }
         do {
@@ -93,7 +101,8 @@ enum KoalaMIDIProfile {
             let record = try JSONSerialization.data(withJSONObject: ["revision": revision, "backup": backup.path], options: .prettyPrinted)
             try record.write(to: receipt, options: .atomic)
         } catch {
-            try oldMapping.write(to: mappingURL, options: .atomic)
+            if let oldMapping { try oldMapping.write(to: mappingURL, options: .atomic) }
+            else if fm.fileExists(atPath: mappingURL.path) { try fm.removeItem(at: mappingURL) }
             try oldDefaults.write(to: defaultsURL, options: .atomic)
             throw error
         }
