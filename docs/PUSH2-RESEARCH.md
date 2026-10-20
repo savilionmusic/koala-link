@@ -1,20 +1,26 @@
 # Push 2 implementation and validation
 
-Status for **Koala Link 1.4.5-preview.1** (app version 1.4.5, build 17), updated
-2026-10-12. The stable release line remains **1.3.0** for MPC Touch. The first
-Push preview, **1.4.0-preview.1** (app 1.4.0, build 8), had screen artwork
-rendered and visually reviewed offline.
+Status updated **2026-10-20** for the current **v1.4.5** release (app version
+1.4.5, build 17). One installer supports MPC Touch and optional Push 2 preview
+use. The user confirmed today that the current app works fine on MPC Touch.
+Push hardware validation remains pending; this release does not claim Push is
+stable or fully validated. The previous **v1.4.5-preview.1** tag is historical
+and contains the same app version/build. The first Push preview,
+**1.4.0-preview.1** (app 1.4.0, build 8), had screen artwork rendered and
+visually reviewed offline.
 The first physical Push session occurred later on 2026-10-11: the user reported
 that waveforms appeared slowly, and the runtime log showed the User MIDI and
 USB display connections opening. Full physical validation remains pending.
 
-The current **1.4.5-preview.1** build 17 is installed and running. It adds
+Build **17**, now distributed on the main **v1.4.5** release, is installed and
+running. It adds
 tempo and sequence previews, local transport/record indicators, a provisional
 playhead, count-in handling, safer snapshot reconciliation, and a pending
 single-pad delete preview. The running app reported User mode, USB display on
 and saved waveforms cached. New sequence/recording and deletion gestures still
 need physical validation; this release does not claim every control is
-verified. No automated tests were run. MPC Touch stable remains **1.3.0**.
+verified. No automated tests were run. The installed Touch app's operation was
+confirmed by the user on 2026-10-20. Push physical validation remains pending.
 
 Build 16 caches decoded
 waveforms and frame lengths by audio file identity, checks saved metadata every

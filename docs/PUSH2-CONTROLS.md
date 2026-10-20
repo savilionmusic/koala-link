@@ -1,9 +1,12 @@
 # Push 2 controls
 
-These bindings describe **1.4.5-preview.1** (app version 1.4.5, build 17).
-The original **1.4.0-preview.1** (app 1.4.0, build 8) was the first Push
-preview. Current new gesture behavior still needs physical validation; this
-release does not claim every control has been verified on a Push 2.
+These bindings describe the current **v1.4.5** release (app version 1.4.5,
+build 17). The same installer supports MPC Touch and optional Push 2 preview
+use. The user confirmed the current app works fine on MPC Touch on 2026-10-20;
+this does not establish Push hardware validation. Push remains a preview, and
+new gesture behavior still needs physical validation. The older
+**v1.4.5-preview.1** tag is historical. The original **1.4.0-preview.1** (app
+1.4.0, build 8) was the first Push preview.
 
 Local update **1.4.3, build 15** adds normal Push pad presses that select the
 editing pad immediately. Sample notes remain mapped on channel 16; piano and
@@ -19,7 +22,7 @@ native mouse edits still depend on saved metadata. The initial START prediction
 keeps the end fixed; conclusive fresh saves teach the installed Koala version's
 boundary behavior. Physical trim agreement remains pending user feedback.
 
-**1.4.5-preview.1** includes cached fast waveform display and sample-pad
+Build **17** includes cached fast waveform display and sample-pad
 selection, local trim-marker feedback, and local tempo, sequence, piano-roll,
 transport and playhead previews. The build is installed and running; new
 gesture behavior still needs physical validation. Timing previews use Koala

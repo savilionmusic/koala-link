@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Savilion Software
  * Description: Software page and consent-based software update signups.
- * Version: 1.0.2
+ * Version: 1.0.3
  */
 if (!defined('ABSPATH')) { exit; }
 
@@ -141,7 +141,8 @@ add_action('wp_enqueue_scripts', function () {
 
 function savi_software_downloads() {
     $base = content_url('/uploads/software/koala-link/');
-    return array('stable' => $base . 'Koala-Link-1.3.0-Installer.pkg', 'preview' => $base . 'Koala-Link-1.4.5-Push-Preview-Installer.pkg');
+    $installer = $base . 'Koala-Link-1.4.5-Installer.pkg';
+    return array('stable' => $installer, 'preview' => $installer);
 }
 
 function savi_software_ticket() {

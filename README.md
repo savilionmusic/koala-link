@@ -1,15 +1,16 @@
 # Koala Link
 
 Use Koala Sampler with an Akai MPC Touch or Ableton Push 2. Koala Link is free
-to download and use. Choose **MPC Touch** or **Push 2** in the startup window;
-change controllers later from the Koala Link menu. Push 2 support is a preview:
-the build succeeds and its screen artwork has been rendered and visually reviewed
-offline. Physical Push hardware validation is still pending.
+to download and use. The current release is **v1.4.5** (app version **1.4.5**,
+build **17**). One installer supports MPC Touch and optional Push 2 preview
+support. The current app was confirmed working on the publisher's MPC Touch
+setup on 2026-10-20. Push 2 remains a preview: its screen artwork has been rendered and
+reviewed offline, but physical Push hardware validation is still pending.
 
-MPC Touch's stable release line is **1.3.0**. The current Push 2 preview is
-**1.4.5-preview.1** (app version **1.4.5**, build **17**).
+**[Download Koala Link v1.4.5](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.5)** · [Push 2 controls](docs/PUSH2-CONTROLS.md) · [Push 2 validation notes](docs/PUSH2-RESEARCH.md)
 
-**[Download the Push 2 preview installer](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.5-preview.1)** · [MPC Touch stable installer](https://github.com/savilionmusic/koala-link/releases/tag/v1.3.0)
+The earlier **v1.4.5-preview.1** tag is historical; it contains the same app
+version and build, but the current public release is **v1.4.5**.
 
 ![Koala Link controller choice](docs/screens/Koala-Link-Controller-Choice.png)
 
@@ -17,10 +18,12 @@ MPC Touch's stable release line is **1.3.0**. The current Push 2 preview is
 
 ## Requirements
 
-- An Apple silicon Mac running macOS 13 or later, and Koala Sampler for Mac.
-- Either an Akai MPC Touch (with DisplayLink Manager), or an Ableton Push 2
-  connected by USB. Close Ableton Live while Koala Link uses the Push display,
-  and quit Paper Cut if it is using the Push.
+- An Apple silicon Mac running macOS 13 or later, and Koala Sampler for Mac
+  (required separately).
+- For MPC Touch, DisplayLink Manager is also required separately; the installer
+  includes the MPC Touch driver. For optional Push 2 preview support, connect
+  the controller by USB. Close Ableton Live while Koala Link uses the Push
+  display, and quit Paper Cut if it is using the Push.
 
 ## Install
 
@@ -94,7 +97,7 @@ Preview the Push screens offline (no controller or MIDI endpoints are opened):
 
 ## Build
 
-The **1.4.5-preview.1** release is app version **1.4.5, build 17**. It includes
+The **v1.4.5** release is app version **1.4.5, build 17**. It includes
 cached fast waveform display and sample-pad selection, local trim feedback,
 and local sequence and piano-roll previews. Timing and sequence previews use
 Koala clock when available and reconcile with saved files; native autosave can
@@ -118,7 +121,9 @@ macro edits share this path. Fresh saved values reconcile the display afterward;
 older reads cannot pull back a more recent edit. START's effect on the other
 boundary is learned from conclusive saved results for each Koala version.
 The original **1.4.0-preview.1** (app 1.4.0, build 8) was the first Push
-preview; the download link above now points to **1.4.5-preview.1**.
+preview. The old **1.4.5-preview.1** tag is historical; the download link
+above points to the current **v1.4.5** release. Push physical validation
+remains pending.
 
 Install Xcode Command Line Tools, then run:
 
