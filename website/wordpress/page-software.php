@@ -2,18 +2,22 @@
 if (!defined('ABSPATH')) { exit; }
 $downloads = savi_software_downloads();
 $software_assets = content_url('/uploads/software/koala-link/');
+$sav_lab_assets = content_url('/uploads/software/sav-lab/');
 $signup_complete = isset($_GET['signup']) && $_GET['signup'] === 'complete';
+// Adapt this page's title and sharing tags while preserving the shared header.
+ob_start();
 get_header();
+echo savi_software_brand_head_markup(ob_get_clean());
 ?>
 <main id="main-content" class="savi-software-page">
-    <div class="savi-software-topline"><span>SB / SOFTWARE</span><a href="#software-updates">Release updates ↓</a></div>
+    <div class="savi-software-topline"><span>SOFTWARE / SAVILION</span><a href="#software-updates">Release updates ↓</a></div>
     <section class="savi-software-intro" aria-labelledby="software-title">
-        <div><p class="savi-software-eyebrow">Built in the studio. Made to be played.</p><h1 id="software-title">Software for your<br>next session.</h1></div>
-        <p>Tools by Savilion for hands-on music making. Start with Koala Link, free to download and use.</p>
+        <div class="savi-software-brand-copy"><h1 id="software-title"><img class="savi-software-brand-logo" src="<?php echo esc_url($sav_lab_assets . 'SAV-LAB-horizontal.svg'); ?>" alt="SAV LAB" width="329" height="100" fetchpriority="high"></h1><p class="savi-software-brand-tagline">Music software by Savilion.</p></div>
+        <p class="savi-software-brand-support">Hands-on tools for making music. Built in the studio by Savilion.</p>
     </section>
 
     <section class="savi-software-product" aria-labelledby="koala-link-title">
-        <div class="savi-software-product-head"><span>01 / KOALA LINK</span><span>FREE DOWNLOAD · macOS</span></div>
+        <div class="savi-software-product-head"><span>01 / KOALA LINK</span><span>BY SAV LAB · FREE DOWNLOAD · macOS</span></div>
         <div class="savi-software-product-grid">
             <div class="savi-software-product-copy">
                 <h2 id="koala-link-title">Koala Link</h2>
@@ -43,11 +47,11 @@ get_header();
         <div class="savi-software-updates-copy">
             <p class="savi-software-eyebrow">SOFTWARE / RELEASE LIST</p>
             <h2 id="updates-title">Hear what’s next.</h2>
-            <p>Get Koala Link updates and news about new Savilion software, including Paper Cut. Join the list for future releases and product launches.</p>
+            <p>Get Koala Link updates and news about new SAV LAB software, including Paper Cut. Join the list for future releases and product launches.</p>
             <p class="savi-software-small">Joining is optional. Koala Link stays free.</p>
         </div>
         <div class="savi-software-form-wrap">
-            <form id="savi-software-signup" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" method="post" <?php echo $signup_complete ? 'hidden' : ''; ?>>
+            <form id="savi-software-signup" action="<?php echo esc_url(home_url('/software/')); ?>" method="post" <?php echo $signup_complete ? 'hidden' : ''; ?>>
                 <input type="hidden" name="action" value="savi_software_signup">
                 <?php wp_nonce_field('savi_software_signup', '_wpnonce', false); ?>
                 <input type="hidden" name="ticket" value="<?php echo esc_attr(savi_software_ticket()); ?>">
@@ -60,7 +64,7 @@ get_header();
                 <p class="savi-software-small" id="savi-software-privacy">Your email and signup preference are stored by Savilion Beats for software updates and product announcements. Unsubscribe from future emails at any time. <a href="<?php echo esc_url(home_url('/privacy-policy/')); ?>">Privacy policy</a>. Need help? <a href="<?php echo esc_url(home_url('/contact/')); ?>">Contact Savilion</a>.</p>
             </form>
             <div id="savi-software-success" class="savi-software-success" role="status" tabindex="-1" <?php echo $signup_complete ? '' : 'hidden'; ?>>
-                <p class="savi-software-eyebrow">SIGNUP SAVED</p><h3>You’re on the list.</h3><p>Koala Link is ready to download. We’ll use your signup for software updates and future product news.</p>
+                <p class="savi-software-eyebrow">SAV LAB / SIGNUP SAVED</p><h3>You’re on the list.</h3><p>Koala Link is ready to download. We’ll use your signup for SAV LAB software updates and future product news.</p>
                 <a class="savi-software-button is-primary" href="<?php echo esc_url($downloads['stable']); ?>" download>Download MPC Touch stable ↓</a>
                 <a class="savi-software-text-link" href="<?php echo esc_url($downloads['preview']); ?>" download>Download Push 2 preview ↓</a>
                 <p class="savi-software-small">Push 2 support is a preview. The latest build adds faster display feedback and sample deletion; complete control validation is ongoing.</p>
@@ -69,11 +73,20 @@ get_header();
     </section>
 
     <section class="savi-software-push" id="push-preview" aria-labelledby="push-title">
-        <div class="savi-software-section-heading"><p class="savi-software-eyebrow">KOALA LINK / NEW CONTROLLER</p><span class="savi-software-tag">PREVIEW</span></div>
+        <div class="savi-software-section-heading"><p class="savi-software-eyebrow">SAV LAB / KOALA LINK / NEW CONTROLLER</p><span class="savi-software-tag">PREVIEW</span></div>
         <div class="savi-software-push-copy"><h2 id="push-title">A Koala view on Push 2.</h2><p>Play and select samples from the pads, trim with the encoders, and perform with effects and the touch strip. Custom sample, piano-roll, sequence, EQ and mixer views bring Koala to the Push display.</p></div>
         <figure class="savi-software-push-screen"><img src="<?php echo esc_url($software_assets . 'Koala-Link-1.4.5-Push-Sample.png'); ?>" alt="Rendered Push 2 sample screen with a waveform, sample start and end, pitch and volume controls, and a bank indicator." width="960" height="160" loading="lazy"><figcaption>Sample screen artwork rendered from version 1.4.5. New gestures and full control coverage are still being validated on hardware.</figcaption></figure>
         <div class="savi-software-push-bottom"><p>Preview <span class="savi-software-number">1.4.5-preview.1</span> adds cached waveforms, immediate trim and sequence feedback, and pad selection for editing. To delete a sample, leave NOTE mode, hold one pad and press DELETE; confirm in Koala if prompted. Recording notes use a local timing preview that settles to Koala’s saved data. Mac edits and new audio still depend on Koala saving; create and edit chops in Koala.</p><a class="savi-software-button" href="<?php echo esc_url($downloads['preview']); ?>" download>Download Push 2 preview ↓</a></div>
         <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link/blob/main/docs/PUSH2-CONTROLS.md">Read the Push 2 controls →</a> · <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link/releases/tag/v1.4.5-preview.1">What’s new in 1.4.5 →</a>
+    </section>
+
+    <section class="savi-software-follow" aria-labelledby="follow-sav-lab-title">
+        <div><p class="savi-software-eyebrow">STUDIO NOTES / DEMOS / RELEASES</p><h2 id="follow-sav-lab-title">Follow SAV LAB</h2></div>
+        <nav aria-label="SAV LAB social profiles">
+            <a class="savi-software-social-link" href="https://www.instagram.com/savlabaudio/" target="_blank" rel="noopener noreferrer">Instagram <span>@savlabaudio</span> <span aria-hidden="true">↗</span></a>
+            <span class="savi-software-social-coming">Facebook <span>Coming soon</span></span>
+            <span class="savi-software-social-coming">YouTube <span>Coming soon</span></span>
+        </nav>
     </section>
 
     <section class="savi-software-details" aria-labelledby="setup-title">
@@ -85,6 +98,6 @@ get_header();
         </div>
     </section>
 
-    <section class="savi-software-next" aria-labelledby="paper-cut-title"><div><p class="savi-software-eyebrow">02 / IN DEVELOPMENT</p><h2 id="paper-cut-title">Paper Cut</h2><p>More Savilion software is on the way. Join the software list for Paper Cut release news and future product launches.</p></div><a class="savi-software-button" href="#software-updates">Get Paper Cut updates ↑</a></section>
+    <section class="savi-software-next" aria-labelledby="paper-cut-title"><div><p class="savi-software-eyebrow">02 / BY SAV LAB / IN DEVELOPMENT</p><h2 id="paper-cut-title">Paper Cut</h2><p>Hands-on music software by SAV LAB. Join the software list for Paper Cut release news and future product launches.</p></div><a class="savi-software-button" href="#software-updates">Get Paper Cut updates ↑</a></section>
 </main>
 <?php get_footer(); ?>

@@ -1,4 +1,6 @@
-.savi-software-page { width:min(1280px,calc(100% - 32px)); margin:16px auto 40px; border:1px solid var(--savi-border); border-radius:8px; overflow:hidden; background:var(--savi-case); color:var(--savi-ink)!important; font-family:var(--savi-sans); -webkit-font-smoothing:antialiased; }
+.savi-software-page { --savi-lab-terracotta:#A94F39; --savi-lab-cream:#F5EBDD; --savi-lab-charcoal:#292724; --savi-case:var(--savi-lab-cream); --savi-case-light:#FBF6ED; --savi-case-dark:#EBDCCE; --savi-ink:var(--savi-lab-charcoal); --savi-ink-soft:#514740; --savi-border:#D4C1B1; --savi-focus:var(--savi-lab-terracotta); --savi-panel-dark:var(--savi-lab-charcoal); --savi-panel-text:var(--savi-lab-cream); --savi-signal:var(--savi-lab-terracotta); width:min(1280px,calc(100% - 32px)); margin:16px auto 40px; border:1px solid var(--savi-border); border-radius:8px; overflow:hidden; background:var(--savi-case); color:var(--savi-ink)!important; font-family:var(--savi-sans); -webkit-font-smoothing:antialiased; }
+@font-face { font-family:SAVLabHand; src:url('/wp-content/uploads/software/sav-lab/AlicjaHand-Regular.otf') format('opentype'); font-style:normal; font-weight:400; font-display:swap; }
+@font-face { font-family:SAVLabHand; src:url('/wp-content/uploads/software/sav-lab/AlicjaHand-Bold.otf') format('opentype'); font-style:normal; font-weight:700; font-display:swap; }
 .savi-software-page *, .savi-software-page *::before, .savi-software-page *::after { box-sizing:border-box; }
 .savi-software-view .savi-player-bar { display:none!important; }
 .savi-software-page [hidden] { display:none!important; }
@@ -13,27 +15,31 @@
 .savi-software-page :target { scroll-margin-top:24px; }
 .savi-software-topline,.savi-software-product-head,.savi-software-eyebrow,.savi-software-display-label,.savi-software-tag,.savi-software-release,.savi-software-number { font-family:var(--savi-mono); font-variant-numeric:tabular-nums; }
 .savi-software-topline,.savi-software-product-head { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:8px 24px; font-size:12px; font-weight:600; letter-spacing:.065em; }
-.savi-software-topline { padding:16px 32px; border-bottom:1px solid var(--savi-border); background:var(--savi-case-light); }
+.savi-software-topline { padding:16px 32px; border-bottom:1px solid var(--savi-border); background:var(--savi-case-light); color:var(--savi-lab-terracotta); }
 .savi-software-topline a { min-height:40px; display:inline-flex; align-items:center; text-decoration:none; }
-.savi-software-intro { padding:56px 48px 48px; display:grid; grid-template-columns:1.5fr 1fr; gap:40px; align-items:end; }
-.savi-software-intro h1 { font-size:clamp(36px,4.3vw,60px); }
-.savi-software-intro>p { margin:0; color:var(--savi-ink-soft); font-size:18px; max-width:34ch; }
+.savi-software-intro { padding:36px 48px; display:grid; grid-template-columns:1fr 1.15fr; gap:40px; align-items:center; }
+.savi-software-brand-logo { display:block; position:static; width:min(270px,100%); max-width:100%; height:auto; }
+.savi-software-brand-copy h1 { margin:0 0 16px; line-height:1; }
+.savi-software-brand-copy .savi-software-brand-tagline { margin:0; font-size:22px; font-weight:500; line-height:1.4; letter-spacing:-.02em; }
+.savi-software-intro>.savi-software-brand-support { margin:0; color:var(--savi-ink-soft); font-size:18px; max-width:38ch; }
 .savi-software-eyebrow { font-size:12px; letter-spacing:.06em; font-weight:600; text-transform:uppercase; }
 .savi-software-intro .savi-software-eyebrow { margin-bottom:20px; }
+.savi-software-updates .savi-software-eyebrow,.savi-software-section-heading .savi-software-eyebrow,.savi-software-next .savi-software-eyebrow { color:var(--savi-lab-terracotta); }
 .savi-software-product { margin:0 24px; border:1px solid var(--savi-border); border-radius:4px; background:var(--savi-case-light); }
-.savi-software-product-head { padding:16px 24px; border-bottom:1px solid var(--savi-border); }
+.savi-software-product-head { padding:16px 24px; border-bottom:1px solid var(--savi-border); color:var(--savi-lab-terracotta); }
 .savi-software-product-grid { display:grid; grid-template-columns:1fr 1.15fr; gap:40px; padding:40px 24px; align-items:center; }
 .savi-software-product-copy h2 { font-size:clamp(44px,5.5vw,76px); margin-bottom:20px; }
 .savi-software-product-copy .savi-software-product-lede { font-size:24px; line-height:1.2; letter-spacing:-.03em; margin-bottom:24px; }
 .savi-software-product-copy>p { font-size:16px; }
 .savi-software-actions { display:flex; flex-direction:column; align-items:flex-start; gap:12px; margin:24px 0 12px; }
 .savi-software-button { min-height:48px; padding:12px 18px; border:1px solid var(--savi-border)!important; border-radius:3px!important; display:inline-flex; align-items:center; justify-content:center; gap:16px; background:var(--savi-case-light)!important; color:var(--savi-ink)!important; font-family:var(--savi-sans)!important; font-size:15px!important; font-weight:600!important; line-height:1.4; text-decoration:none!important; text-align:center; cursor:pointer; transition:background-color 150ms ease,border-color 150ms ease; }
-body .savi-software-button.is-primary { background:var(--savi-panel-dark)!important; color:var(--savi-panel-text)!important; border-color:var(--savi-panel-dark)!important; }
-body .savi-software-button.is-primary:hover { background:var(--savi-ink-soft)!important; }
+body .savi-software-button.is-primary { background:var(--savi-lab-terracotta)!important; color:var(--savi-lab-cream)!important; border-color:var(--savi-lab-terracotta)!important; }
+body .savi-software-button.is-primary:hover { background:#873C2B!important; border-color:#873C2B!important; }
 .savi-software-button:hover { border-color:var(--savi-ink)!important; background:var(--savi-case-dark)!important; }
 .savi-software-button:disabled { opacity:.65; cursor:wait; }
 .savi-software-text-link { display:inline-flex; align-items:center; min-height:44px; text-decoration:underline!important; text-underline-offset:4px; font-size:14px; font-weight:600; }
 .savi-software-product-copy .savi-software-release { font-size:12px; color:var(--savi-ink-soft); margin-bottom:8px; }
+.savi-software-product-copy .savi-software-release span { color:var(--savi-lab-terracotta); font-weight:700; }
 .savi-software-page .savi-software-small { font-size:13px; color:var(--savi-ink-soft); line-height:1.6; }
 .savi-software-app-figure { margin:0; min-width:0; background:var(--savi-panel-dark); border-radius:4px; padding:12px; }
 .savi-software-display-label { color:var(--savi-panel-text); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:10px; letter-spacing:.04em; padding:0 0 12px; }
@@ -68,7 +74,7 @@ body .savi-software-field input,body .savi-software-field select { display:block
 .savi-software-push { padding:48px; border-bottom:1px solid var(--savi-border); }
 .savi-software-section-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; }
 .savi-software-section-heading p { margin:0; }
-.savi-software-tag { font-size:11px; border:1px solid var(--savi-border); padding:6px 10px; border-radius:2px; letter-spacing:.06em; }
+.savi-software-tag { font-size:11px; border:1px solid var(--savi-lab-terracotta); color:var(--savi-lab-terracotta); padding:6px 10px; border-radius:2px; letter-spacing:.06em; }
 .savi-software-push-copy { display:grid; grid-template-columns:1fr 1fr; gap:64px; align-items:start; margin:24px 0 32px; }
 .savi-software-push-copy h2 { font-size:clamp(30px,3.5vw,42px); }
 .savi-software-push-copy p { margin:0; }
@@ -78,6 +84,15 @@ body .savi-software-field input,body .savi-software-field select { display:block
 .savi-software-push-bottom { display:flex; align-items:flex-start; gap:32px; justify-content:space-between; }
 .savi-software-push-bottom p { font-size:14px; color:var(--savi-ink-soft); max-width:72ch; }
 .savi-software-push-bottom .savi-software-button { flex-shrink:0; }
+.savi-software-follow { display:grid; grid-template-columns:1fr 1.2fr; gap:32px; align-items:center; padding:36px 48px; border-bottom:1px solid var(--savi-border); background:var(--savi-case-light); }
+.savi-software-follow h2 { font-size:clamp(28px,3.5vw,40px); margin-top:8px; }
+.savi-software-follow nav { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; }
+.savi-software-social-link,.savi-software-social-coming { min-height:44px; display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--savi-border); border-radius:3px; font-size:14px; line-height:1.4; }
+.savi-software-social-link { color:var(--savi-lab-terracotta)!important; border-color:var(--savi-lab-terracotta); font-weight:600; text-decoration:none!important; }
+.savi-software-social-link span:first-of-type { color:var(--savi-ink-soft); font-weight:400; }
+.savi-software-social-link:hover { background:var(--savi-case-dark); }
+.savi-software-social-coming { color:var(--savi-ink-soft); }
+.savi-software-social-coming span { color:var(--savi-lab-terracotta); font-size:12px; font-weight:600; }
 .savi-software-details { display:grid; grid-template-columns:1fr 1.2fr; gap:64px; padding:48px; border-bottom:1px solid var(--savi-border); }
 .savi-software-details h2 { font-size:32px; }
 .savi-software-detail-list details { border-top:1px solid var(--savi-border); }
@@ -91,8 +106,10 @@ body .savi-software-field input,body .savi-software-field select { display:block
 .savi-software-next h2 { font-size:36px; margin-bottom:16px; }
 .savi-software-next p:last-child { margin:0; }
 .savi-software-next .savi-software-button { flex-shrink:0; }
-@media(min-width:768px) { .savi-software-page .savi-software-intro { min-height:284px; } }
+@media(min-width:768px) { .savi-software-page .savi-software-intro { min-height:220px; } }
 @media(max-width:960px) { .savi-software-intro,.savi-software-updates,.savi-software-push-copy,.savi-software-details { gap:32px; } .savi-software-product-grid { grid-template-columns:1fr; } .savi-software-app-figure { max-width:680px; } .savi-software-push-bottom { flex-direction:column; gap:8px; } }
-@media(max-width:767px) { .savi-software-intro,.savi-software-updates,.savi-software-push-copy,.savi-software-details { grid-template-columns:1fr; } .savi-software-intro,.savi-software-updates,.savi-software-push,.savi-software-details,.savi-software-next { padding:32px 24px; } .savi-software-intro>p { max-width:50ch; } .savi-software-features { grid-template-columns:1fr; } .savi-software-features>div+div { border-left:0; border-top:1px solid var(--savi-border); } .savi-software-next { flex-direction:column; align-items:flex-start; gap:24px; } .savi-software-product { margin:0 16px; } .savi-software-product-grid { padding:28px 20px; gap:28px; } .savi-software-product-head { padding:16px 20px; } .savi-software-topline { padding:12px 24px; } .savi-software-form-wrap { padding:20px; } }
-@media(max-width:480px) { .savi-software-page { width:calc(100% - 18px); } .savi-software-intro,.savi-software-updates,.savi-software-push,.savi-software-details,.savi-software-next { padding:28px 20px; } .savi-software-topline { font-size:11px; padding:12px 20px; } .savi-software-product-head { font-size:10px; } .savi-software-product-copy h2 { font-size:44px; } .savi-software-product-copy .savi-software-product-lede { font-size:22px; } .savi-software-actions { align-items:stretch; } .savi-software-button { width:100%; } .savi-software-display-label { font-size:9px; } .savi-software-form-wrap { padding:16px; } .savi-software-section-heading { align-items:flex-start; } .savi-software-push-screen img { border-width:6px; } }
+@media(max-width:767px) { .savi-software-intro { gap:24px; } .savi-software-intro,.savi-software-updates,.savi-software-push-copy,.savi-software-details { grid-template-columns:1fr; } .savi-software-intro,.savi-software-updates,.savi-software-push,.savi-software-details,.savi-software-next { padding:32px 24px; } .savi-software-intro>p { max-width:50ch; } .savi-software-features { grid-template-columns:1fr; } .savi-software-features>div+div { border-left:0; border-top:1px solid var(--savi-border); } .savi-software-next { flex-direction:column; align-items:flex-start; gap:24px; } .savi-software-product { margin:0 16px; } .savi-software-product-grid { padding:28px 20px; gap:28px; } .savi-software-product-head { padding:16px 20px; } .savi-software-topline { padding:12px 24px; } .savi-software-form-wrap { padding:20px; } }
+@media(max-width:480px) { .savi-software-page { width:calc(100% - 18px); } .savi-software-intro,.savi-software-updates,.savi-software-push,.savi-software-details,.savi-software-next { padding:28px 20px; } .savi-software-intro { gap:20px; } .savi-software-brand-logo { width:240px; } .savi-software-brand-copy .savi-software-brand-tagline { font-size:20px; } .savi-software-intro>.savi-software-brand-support { font-size:16px; } .savi-software-topline { font-size:11px; padding:12px 20px; } .savi-software-product-head { font-size:10px; } .savi-software-product-copy h2 { font-size:44px; } .savi-software-product-copy .savi-software-product-lede { font-size:22px; } .savi-software-actions { align-items:stretch; } .savi-software-button { width:100%; } .savi-software-display-label { font-size:9px; } .savi-software-form-wrap { padding:16px; } .savi-software-section-heading { align-items:flex-start; } .savi-software-push-screen img { border-width:6px; } }
 @media(prefers-reduced-motion:reduce) { .savi-software-page { scroll-behavior:auto; } .savi-software-button { transition:none; } }
+@media(max-width:767px) { .savi-software-follow { grid-template-columns:1fr; gap:20px; padding:32px 24px; } }
+@media(max-width:480px) { .savi-software-follow { padding:28px 20px; } .savi-software-social-link,.savi-software-social-coming { flex:1 1 auto; justify-content:center; } }

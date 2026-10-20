@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Savilion Software
  * Description: Software page and consent-based software update signups.
- * Version: 1.0.1
+ * Version: 1.0.2
  */
 if (!defined('ABSPATH')) { exit; }
 
@@ -64,6 +64,56 @@ add_filter('body_class', function ($classes) {
     return $classes;
 });
 
+function savi_software_page_description() {
+    return 'Hands-on tools for making music. Built in the studio by Savilion. Explore Koala Link, Paper Cut and more from SAV LAB.';
+}
+
+function savi_software_page_social_image() {
+    return content_url('/uploads/software/sav-lab/SAV-LAB-Alicja-preview.png');
+}
+
+function savi_software_brand_head_markup($html) {
+    if (!is_page('software')) { return $html; }
+    $title = 'SAV LAB — Music software by Savilion';
+    $description = savi_software_page_description();
+    $image = savi_software_page_social_image();
+    $tags = array(
+        'description' => $description,
+        'og:type' => 'website',
+        'og:title' => $title,
+        'og:description' => $description,
+        'og:image' => $image,
+        'og:url' => home_url('/software/'),
+        'twitter:card' => 'summary_large_image',
+        'twitter:title' => $title,
+        'twitter:description' => $description,
+        'twitter:image' => $image,
+    );
+    $html = preg_replace('/<title\\b[^>]*>.*?<\\/title>/is', '<title>' . esc_html($title) . '</title>', $html, 1);
+    $seen = array();
+    $html = preg_replace_callback('/<meta\\b[^>]*>/i', function ($match) use ($tags, &$seen) {
+        $tag = $match[0];
+        if (!preg_match("~\\b(?:name|property)\\s*=\\s*([\"'])(.*?)\\1~i", $tag, $key)) { return $tag; }
+        $name = strtolower($key[2]);
+        if (!array_key_exists($name, $tags)) { return $tag; }
+        if (isset($seen[$name])) { return ''; }
+        $seen[$name] = true;
+        $value = esc_attr($tags[$name]);
+        $replaced = preg_replace("~\\s+content\\s*=\\s*([\"']).*?\\1~i", ' content="' . $value . '"', $tag, 1, $count);
+        return $count ? $replaced : substr($tag, 0, -1) . ' content="' . $value . '">';
+    }, $html);
+    $missing = '';
+    foreach ($tags as $name => $value) {
+        if (isset($seen[$name])) { continue; }
+        $attribute = in_array($name, array('description', 'twitter:card', 'twitter:title', 'twitter:description', 'twitter:image'), true) ? 'name' : 'property';
+        $missing .= '<meta ' . $attribute . '="' . esc_attr($name) . '" content="' . esc_attr($value) . '">' . "\n";
+    }
+    if ($missing !== '' && stripos($html, '</head>') !== false) {
+        $html = preg_replace('/<\\/head>/i', $missing . '</head>', $html, 1);
+    }
+    return $html;
+}
+
 add_filter('the_content', function ($content) {
     if (!is_page('privacy-policy') || !is_main_query() || !in_the_loop()) { return $content; }
     return $content . '<section id="software-updates-privacy"><h2>Software update signups</h2><p>Added October 11, 2026. If you choose to join the software updates list, Savilion Beats stores your email address, controller preference, signup source, consent wording and consent date in our WordPress database. We use this information for Koala Link updates and news about future Savilion software, including Paper Cut and product launches.</p><p>Signup is optional and is not required to download Koala Link. You can unsubscribe using the link included in future software emails, or <a href="' . esc_url(home_url('/contact/')) . '">contact Savilion</a>. We retain an unsubscribe status to respect your email preference.</p></section>';
@@ -75,6 +125,9 @@ add_action('template_redirect', function () {
     do_action('litespeed_control_set_nocache', 'Software signup tokens');
     nocache_headers();
     header('Referrer-Policy: strict-origin-when-cross-origin');
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && is_string($_POST['action']) && $_POST['action'] === 'savi_software_signup') {
+        savi_software_signup();
+    }
 });
 
 add_action('wp_enqueue_scripts', function () {

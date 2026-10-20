@@ -20,7 +20,7 @@
     var controller = new AbortController();
     var timeout = setTimeout(function () { controller.abort(); }, 20000);
     try {
-      var response = await fetch(form.action, { method: 'POST', body: data, credentials: 'same-origin', signal: controller.signal, headers: { 'Accept': 'application/json' } });
+      var response = await fetch(form.getAttribute('action'), { method: 'POST', body: data, credentials: 'same-origin', signal: controller.signal, headers: { 'Accept': 'application/json' } });
       var result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.data && result.data.message ? result.data.message : 'We could not save your signup. Please try again.');
       form.hidden = true;
