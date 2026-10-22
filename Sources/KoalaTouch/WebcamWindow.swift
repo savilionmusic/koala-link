@@ -19,11 +19,9 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     private var problem: String?
     private var clock: Timer?, recordStarted: Date?
     /// SOUND OUT and LAYOUT (the third column).
-    private let vu = WebcamVUView(frame: .zero)
-    private let drive = NSSlider(value: 0, minValue: 0, maxValue: 12, target: nil, action: nil)
-    private let driveLabel = NSTextField(labelWithString: "")
-    private let mpcOut = NSButton(checkboxWithTitle: "MPC3000 OUT (soft clip)", target: nil, action: nil)
-    private let limiter = NSButton(checkboxWithTitle: "Limiter at −1 dB", target: nil, action: nil)
+    /// The same meter and sound controls on this window and on the floating preview.
+    private let strip = WebcamSoundStrip(frame: NSRect(x: 0, y: 0, width: 295, height: WebcamSoundStrip.height))
+    private let floatingStrip = WebcamSoundStrip(frame: NSRect(x: 0, y: 0, width: 400, height: WebcamSoundStrip.height))
     private let editLayout = NSButton(checkboxWithTitle: "Move things on the picture", target: nil, action: nil)
     private let canvas = WebcamLayoutCanvas(frame: NSRect(x: 20, y: 20, width: 800, height: 660))
     private var meterClock: Timer?
@@ -84,13 +82,8 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         }
         let soundTitle = NSTextField(labelWithString: "SOUND OUT"); soundTitle.font = KoalaLook.font(30); soundTitle.textColor = KoalaLook.pink
         place2(soundTitle, height: 38)
-        place2(vu, height: 160, gap: 12)
-        heading2("DRIVE"); driveLabel.font = KoalaLook.font(15); driveLabel.textColor = KoalaLook.foreground; driveLabel.alignment = .right
-        driveLabel.frame = NSRect(x: x2, y: y2 + 4, width: width2, height: 20); content.addSubview(driveLabel)
-        place2(drive, height: 24)
-        place2(mpcOut, height: 22, gap: 6); place2(limiter, height: 22, gap: 20)
-        for control in [drive, mpcOut, limiter] as [NSControl] { control.target = self; control.action = #selector(soundChanged) }
-        drive.isContinuous = true
+        place2(strip, height: WebcamSoundStrip.height, gap: 24)
+        for s in [strip, floatingStrip] { s.onChange = { [weak self] change, done in self?.soundChanged(change, done: done) } }
         let layoutTitle = NSTextField(labelWithString: "LAYOUT"); layoutTitle.font = KoalaLook.font(30); layoutTitle.textColor = KoalaLook.pink
         place2(layoutTitle, height: 38)
         editLayout.target = self; editLayout.action = #selector(toggleEditLayout); place2(editLayout, height: 22, gap: 8)
@@ -120,21 +113,24 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
 
     func open() {
         fillControls()
-        studio.start()
-        if meterClock == nil {
-            meterClock = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
-                guard let self else { return }
-                self.vu.reading = self.studio.meter
-            }
-        }
+        studio.start(); startMeters()
         showWindow(nil); window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         refreshNote()
     }
+    private func startMeters() {
+        guard meterClock == nil else { return }
+        meterClock = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let reading = self.studio.meter
+            self.strip.meter.reading = reading
+            if self.floating != nil { self.floatingStrip.meter.reading = reading }
+        }
+    }
     /// Just the floating preview (the menu's Webcam Preview).
     func openFloating() {
         fillControls()
-        studio.start()
+        studio.start(); startMeters()
         if floating == nil { toggleFloating() }
     }
     /// The webcam stops once both this window and the floating preview are closed.
@@ -172,8 +168,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         shape.selectedSegment = s.vertical ? 1 : 0
         rotatePopup.selectItem(at: s.rotate ?? 1)
         for (check, on) in zip(checks, [s.tutorial, s.overlay, s.effects, s.mirror]) { check.state = on ? .on : .off }
-        drive.doubleValue = s.drive ?? 0; driveLabel.stringValue = String(format: "+%.1f dB", drive.doubleValue)
-        mpcOut.state = s.mpcOut ?? true ? .on : .off; limiter.state = s.limiter ?? true ? .on : .off
+        strip.show(s); floatingStrip.show(s)
         syncCanvas()
         folderLabel.stringValue = (s.folderURL.path as NSString).abbreviatingWithTildeInPath
     }
@@ -209,11 +204,9 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         refreshNote()
     }
 
-    @objc private func soundChanged() {
-        let value = (drive.doubleValue * 2).rounded() / 2, clip = mpcOut.state == .on, limit = limiter.state == .on
-        driveLabel.stringValue = String(format: "+%.1f dB", value)
-        let done = NSApp.currentEvent?.type != .leftMouseDragged
-        studio.update(save: done) { $0.drive = value; $0.mpcOut = clip; $0.limiter = limit }
+    private func soundChanged(_ change: (inout WebcamSettings) -> Void, done: Bool) {
+        studio.update(save: done, change)
+        strip.show(studio.settings); floatingStrip.show(studio.settings)
     }
     @objc private func toggleEditLayout() { canvas.isHidden = editLayout.state != .on; syncCanvas() }
     @objc private func resetLayout() {
@@ -290,9 +283,12 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         panel.isReleasedWhenClosed = false; panel.delegate = self
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 225 + Self.bar))
         let picture = WebcamPictureView(frame: NSRect(x: 0, y: Self.bar, width: 400, height: 225))
-        arm.frame = NSRect(x: 6, y: 4, width: 388, height: Self.bar - 8); arm.autoresizingMask = [.width]
+        picture.autoresizingMask = [.width, .height]
+        floatingStrip.frame = NSRect(x: 6, y: 40, width: 388, height: WebcamSoundStrip.height); floatingStrip.autoresizingMask = [.width]
+        floatingStrip.show(studio.settings)
+        arm.frame = NSRect(x: 6, y: 4, width: 388, height: 32); arm.autoresizingMask = [.width]
         arm.bezelStyle = .rounded; arm.font = KoalaLook.font(15); arm.target = self; arm.action = #selector(toggleArm)
-        content.addSubview(picture); content.addSubview(arm)
+        content.addSubview(picture); content.addSubview(floatingStrip); content.addSubview(arm)
         panel.contentView = content
         floating = panel; floatingPicture = picture; sizeOutput(); showRecording()
         if let screen = NSScreen.main {
@@ -301,7 +297,8 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         }
         panel.orderFrontRegardless()
     }
-    private static let bar: CGFloat = 36
+    /// The floating preview's controls under the picture: the sound strip and ARM.
+    private static let bar: CGFloat = WebcamSoundStrip.height + 46
     private func sizeOutput() {
         let vertical = studio.settings.vertical
         if let output {
@@ -309,7 +306,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
             output.contentAspectRatio = size; output.setContentSize(size)
         }
         if let floating {
-            let size = vertical ? NSSize(width: 225, height: 400) : NSSize(width: 400, height: 225)
+            let size = vertical ? NSSize(width: 290, height: 516) : NSSize(width: 400, height: 225)
             floating.setContentSize(NSSize(width: size.width, height: size.height + Self.bar))
         }
     }
@@ -420,6 +417,55 @@ final class WebcamLayoutCanvas: NSView {
             name.draw(at: NSPoint(x: r.minX + 8, y: r.maxY - 22), withAttributes: attributes)
             if part != .card { colour.setFill(); NSRect(x: r.maxX - 12, y: r.maxY - 12, width: 12, height: 12).fill() }
         }
+    }
+}
+
+/// The dB meter with DRIVE, THRESHOLD, MPC3000 OUT and LIMITER (ceiling −1 dB), reporting each change.
+final class WebcamSoundStrip: NSView {
+    static let height: CGFloat = 148
+    let meter = WebcamDBMeter(frame: .zero)
+    var onChange: (((inout WebcamSettings) -> Void, Bool) -> Void)?
+    private let drive = NSSlider(value: 0, minValue: 0, maxValue: 12, target: nil, action: nil)
+    private let threshold = NSSlider(value: 0, minValue: -20, maxValue: 0, target: nil, action: nil)
+    private let driveValue = NSTextField(labelWithString: ""), thresholdValue = NSTextField(labelWithString: "")
+    private let mpcOut = NSButton(checkboxWithTitle: "MPC3000 OUT", target: nil, action: nil)
+    private let limiter = NSButton(checkboxWithTitle: "LIMITER · CEILING −1 dB", target: nil, action: nil)
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        let w = frame.width
+        meter.frame = NSRect(x: 0, y: 84, width: w, height: 64); meter.autoresizingMask = [.width]
+        addSubview(meter)
+        for (i, (name, slider, value)) in [("DRIVE", drive, driveValue), ("THRESH", threshold, thresholdValue)].enumerated() {
+            let y = CGFloat(56 - i * 28)
+            let label = NSTextField(labelWithString: name); label.font = KoalaLook.font(13); label.textColor = KoalaLook.muted
+            label.frame = NSRect(x: 0, y: y, width: 56, height: 20)
+            slider.frame = NSRect(x: 58, y: y, width: w - 58 - 66, height: 22); slider.autoresizingMask = [.width]
+            slider.isContinuous = true; slider.target = self; slider.action = #selector(changed)
+            value.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium); value.textColor = KoalaLook.foreground; value.alignment = .right
+            value.frame = NSRect(x: w - 64, y: y + 2, width: 64, height: 18); value.autoresizingMask = [.minXMargin]
+            addSubview(label); addSubview(slider); addSubview(value)
+        }
+        mpcOut.frame = NSRect(x: 0, y: 2, width: 112, height: 20)
+        limiter.frame = NSRect(x: 114, y: 2, width: w - 114, height: 20); limiter.autoresizingMask = [.width]
+        for check in [mpcOut, limiter] { check.font = NSFont.systemFont(ofSize: 11); check.target = self; check.action = #selector(changed); addSubview(check) }
+    }
+    required init?(coder: NSCoder) { fatalError("Not used") }
+    func show(_ s: WebcamSettings) {
+        drive.doubleValue = s.drive ?? 0; threshold.doubleValue = s.threshold ?? 0
+        mpcOut.state = s.mpcOut ?? true ? .on : .off; limiter.state = s.limiter ?? true ? .on : .off
+        threshold.isEnabled = limiter.state == .on
+        label()
+    }
+    private func label() {
+        driveValue.stringValue = String(format: "+%.1f dB", drive.doubleValue)
+        thresholdValue.stringValue = String(format: "%.1f dB", threshold.doubleValue)
+    }
+    @objc private func changed() {
+        let d = (drive.doubleValue * 2).rounded() / 2, t = (threshold.doubleValue * 2).rounded() / 2
+        let clip = mpcOut.state == .on, limit = limiter.state == .on
+        drive.doubleValue = d; threshold.doubleValue = t; label()
+        let done = NSApp.currentEvent?.type != .leftMouseDragged
+        onChange?({ $0.drive = d; $0.threshold = t; $0.mpcOut = clip; $0.limiter = limit }, done)
     }
 }
 

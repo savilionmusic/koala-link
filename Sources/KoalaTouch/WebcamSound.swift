@@ -2,8 +2,9 @@ import AppKit
 import AVFoundation
 
 // WEBCAM SOUND (2026-10-22): what the recordings' sound goes through, in order, on the capture's own audio thread:
-// DRIVE (0 to +12 dB) → MPC3000 OUT, a soft clipper after the MPC3000's output → LIMITER at −1 dBFS, so a video is
-// loud without clipping. The VU meter reads the result.
+// DRIVE (0 to +12 dB) → MPC3000 OUT, a soft clipper after the MPC3000's output → LIMITER with a THRESHOLD (0 to
+// −20 dB: the sound is raised by that much into it) and a −1 dBFS ceiling, so a video is loud without clipping. The dB
+// meter reads the result.
 //
 // The MPC3000 OUT is an approximation from the machine's known character, not a measurement of real hardware: a gentle
 // top-end roll-off like its output filter (a one-pole low-pass at 16 kHz) and an output stage that rounds peaks a
@@ -15,20 +16,22 @@ import AVFoundation
 // moved back by the look-ahead so it stays in sync with the picture.
 
 final class WebcamSoundChain {
-    /// dBFS: the VU (RMS, 300 ms), the peak, and how much the limiter is taking off.
-    struct Meter { var vu = -60.0, peak = -60.0, reduction = 0.0 }
+    /// dBFS, left and right: RMS (300 ms) and peak (falling back), and how much the limiter is taking off.
+    struct Meter { var rms = [-90.0, -90.0], peak = [-90.0, -90.0], reduction = 0.0 }
     static let ceiling: Float = 0.891
     private let lock = NSLock()
-    private var drive: Float = 1, clip = true, limit = true
+    private var drive: Float = 1, push: Float = 1, clip = true, limit = true
     private var meter = Meter()
     private var rate = 0.0, lookahead = 0
     private var lowpass: [Float] = [0, 0], dcIn: [Float] = [0, 0], dcOut: [Float] = [0, 0]
     private var lowpassCoef: Float = 0, dcCoef: Float = 0, releaseCoef: Float = 0, vuCoef: Float = 0
     private var delayL: [Float] = [], delayR: [Float] = [], needed: [Float] = [], smoothed: [Float] = []
-    private var index = 0, held: Float = 1, sum: Float = 0, vuSquare: Float = 0, peak: Float = 0
+    private var index = 0, held: Float = 1, sum: Float = 0, squares: [Float] = [0, 0], peaks: [Float] = [0, 0]
 
-    func configure(driveDB: Double, clip: Bool, limit: Bool) {
-        lock.lock(); drive = Float(pow(10, driveDB / 20)); self.clip = clip; self.limit = limit; lock.unlock()
+    func configure(driveDB: Double, clip: Bool, limit: Bool, thresholdDB: Double) {
+        lock.lock()
+        drive = Float(pow(10, driveDB / 20)); push = Float(pow(10, -min(0, thresholdDB) / 20)); self.clip = clip; self.limit = limit
+        lock.unlock()
     }
     var reading: Meter { lock.lock(); defer { lock.unlock() }; return meter }
 
@@ -72,7 +75,7 @@ final class WebcamSoundChain {
                                                                       flags: kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment, blockBufferOut: &block) == noErr
         else { return sample }
         if d.mSampleRate != rate { prepare(d.mSampleRate) }
-        lock.lock(); let gain = drive, clip = self.clip, limit = self.limit; lock.unlock()
+        lock.lock(); let gain = drive, clip = self.clip, limit = self.limit, push = limit ? self.push : 1; lock.unlock()
 
         // Our own copy, in the source's layout (interleaved or one buffer per channel).
         let buffers = UnsafeMutableAudioBufferListPointer(list)
@@ -94,12 +97,13 @@ final class WebcamSoundChain {
         }
 
         let n = lookahead + 1
-        var loudest: Float = 0, lowestGain: Float = 1
+        var loudest: [Float] = [0, 0], lowestGain: Float = 1
         for f in 0..<frames {
             guard let pl = pointer(f, 0) else { break }
             let pr = pointer(f, 1) ?? pl
             var l = pl.pointee * gain, r = pr.pointee * gain
             if clip { l = colour(l, 0); r = colour(r, 1) }
+            l *= push; r *= push
             // Look-ahead limiter (see the top of the file).
             delayL[index] = l; delayR[index] = r
             let p = max(abs(l), abs(r))
@@ -115,15 +119,17 @@ final class WebcamSoundChain {
             index = oldest
             pl.pointee = ol
             if channels > 1 { pr.pointee = or }
-            vuSquare += ((ol * ol + or * or) / 2 - vuSquare) * vuCoef
-            loudest = max(loudest, abs(ol), abs(or)); lowestGain = min(lowestGain, g)
+            squares[0] += (ol * ol - squares[0]) * vuCoef; squares[1] += (or * or - squares[1]) * vuCoef
+            loudest[0] = max(loudest[0], abs(ol)); loudest[1] = max(loudest[1], abs(or)); lowestGain = min(lowestGain, g)
         }
         sum = smoothed.reduce(0, +)
 
         lock.lock()
-        meter.vu = 10 * log10(max(1e-7, Double(vuSquare)))
-        peak = max(loudest, peak * 0.85)
-        meter.peak = 20 * log10(max(1e-6, Double(peak)))
+        for c in 0..<2 {
+            peaks[c] = max(loudest[c], peaks[c] * 0.85)
+            meter.rms[c] = 10 * log10(max(1e-9, Double(squares[c])))
+            meter.peak[c] = 20 * log10(max(1e-5, Double(peaks[c])))
+        }
         meter.reduction = 20 * log10(Double(lowestGain))
         lock.unlock()
 
@@ -144,40 +150,45 @@ final class WebcamSoundChain {
     }
 }
 
-/// An analogue-style VU: 0 VU = −14 dBFS RMS (about where streaming platforms set loudness), red from 0 VU, with the
-/// peak and the limiter's gain reduction written underneath.
-final class WebcamVUView: NSView {
+/// The dB meter: left and right bars from −48 to 0 dBFS (RMS filled, peak as a line with its number), and the limiter's
+/// gain reduction under them. Blue to −12, yellow to −3, pink above.
+final class WebcamDBMeter: NSView {
     var reading = WebcamSoundChain.Meter() { didSet { needsDisplay = true } }
-    private var needle = -20.0
-    static let reference = -14.0
-    override var isFlipped: Bool { false }
+    private static let floor = -48.0
+    private func x(_ db: Double, _ r: NSRect) -> CGFloat { r.minX + r.width * CGFloat((max(Self.floor, min(0, db)) - Self.floor) / -Self.floor) }
     override func draw(_ dirtyRect: NSRect) {
         let b = bounds
-        NSColor(calibratedWhite: 0.11, alpha: 1).setFill()
-        NSBezierPath(roundedRect: b, xRadius: 10, yRadius: 10).fill()
-        let centre = NSPoint(x: b.midX, y: b.minY + 34), radius = min(b.width * 0.46, b.height - 48)
-        func angle(_ vu: Double) -> CGFloat {
-            let t = (max(-20, min(3, vu)) + 20) / 23
-            return CGFloat(150 - 120 * t) * .pi / 180
+        NSColor(calibratedWhite: 0.1, alpha: 1).setFill(); NSBezierPath(roundedRect: b, xRadius: 6, yRadius: 6).fill()
+        let small: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium), .foregroundColor: NSColor(white: 1, alpha: 0.7)]
+        let labelWidth: CGFloat = 14, numberWidth: CGFloat = 40
+        let area = NSRect(x: b.minX + 6 + labelWidth, y: b.minY + 16, width: b.width - 12 - labelWidth - numberWidth, height: b.height - 22)
+        let rowHeight = (area.height - 4) / 3
+        for c in 0..<2 {
+            let row = NSRect(x: area.minX, y: area.maxY - CGFloat(c + 1) * rowHeight - CGFloat(c) * 2, width: area.width, height: rowHeight)
+            NSColor(white: 1, alpha: 0.08).setFill(); row.fill()
+            let level = x(reading.rms[c], row)
+            for (from, to, colour) in [(Self.floor, -12.0, KoalaLook.blue), (-12.0, -3.0, NSColor.systemYellow), (-3.0, 0.0, KoalaLook.pink)] {
+                let start = x(from, row), end = min(level, x(to, row))
+                if end > start { colour.setFill(); NSRect(x: start, y: row.minY, width: end - start, height: row.height).fill() }
+            }
+            let peakX = x(reading.peak[c], row)
+            (reading.peak[c] > -3 ? KoalaLook.pink : NSColor.white).setFill()
+            NSRect(x: peakX - 1, y: row.minY, width: 2, height: row.height).fill()
+            (c == 0 ? "L" : "R" as NSString).draw(at: NSPoint(x: b.minX + 6, y: row.midY - 7), withAttributes: small)
+            let number = reading.peak[c] < -80 ? "–" : String(format: "%.1f", reading.peak[c])
+            (number as NSString).draw(at: NSPoint(x: row.maxX + 6, y: row.midY - 7), withAttributes: small)
         }
-        func point(_ vu: Double, _ r: CGFloat) -> NSPoint { NSPoint(x: centre.x + cos(angle(vu)) * r, y: centre.y + sin(angle(vu)) * r) }
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: NSColor(white: 1, alpha: 0.75)]
-        for mark in [-20.0, -10, -7, -5, -3, -1, 0, 1, 2, 3] {
-            let tick = NSBezierPath(); tick.move(to: point(mark, radius - 8)); tick.line(to: point(mark, radius))
-            (mark >= 0 ? KoalaLook.pink : NSColor(white: 1, alpha: 0.7)).setStroke(); tick.lineWidth = 2; tick.stroke()
-            let text = (mark > 0 ? "+" : "") + String(Int(mark)) as NSString
-            let size = text.size(withAttributes: attributes), p = point(mark, radius + 9)
-            text.draw(at: NSPoint(x: p.x - size.width / 2, y: p.y - size.height / 2), withAttributes: attributes)
+        // The limiter's gain reduction grows from the right (0 to −12 dB across).
+        let gr = NSRect(x: area.minX, y: area.minY, width: area.width, height: rowHeight)
+        NSColor(white: 1, alpha: 0.05).setFill(); gr.fill()
+        let amount = CGFloat(min(12, -reading.reduction) / 12) * gr.width
+        KoalaLook.pink.withAlphaComponent(0.8).setFill(); NSRect(x: gr.maxX - amount, y: gr.minY, width: amount, height: gr.height).fill()
+        ("GR" as NSString).draw(at: NSPoint(x: b.minX + 4, y: gr.midY - 7), withAttributes: small)
+        (String(format: "%.1f", reading.reduction) as NSString).draw(at: NSPoint(x: gr.maxX + 6, y: gr.midY - 7), withAttributes: small)
+        for mark in [-48.0, -24, -12, -6, -3, 0] {
+            let text = (mark == 0 ? "0" : String(Int(mark))) as NSString
+            let size = text.size(withAttributes: small)
+            text.draw(at: NSPoint(x: x(mark, area) - size.width / 2, y: b.minY + 2), withAttributes: small)
         }
-        let arc = NSBezierPath()
-        arc.appendArc(withCenter: centre, radius: radius - 4, startAngle: angle(0) * 180 / .pi, endAngle: angle(3) * 180 / .pi, clockwise: true)
-        KoalaLook.pink.setStroke(); arc.lineWidth = 4; arc.stroke()
-        // The needle eases toward the reading, as a real one would.
-        needle += (reading.vu - Self.reference - needle) * 0.35
-        let hand = NSBezierPath(); hand.move(to: centre); hand.line(to: point(needle, radius - 2))
-        KoalaLook.blue.setStroke(); hand.lineWidth = 2.5; hand.stroke()
-        let label = String(format: "VU   PEAK %.1f dB   LIMIT %.1f dB", reading.peak, reading.reduction) as NSString
-        let size = label.size(withAttributes: attributes)
-        label.draw(at: NSPoint(x: b.midX - size.width / 2, y: b.minY + 8), withAttributes: attributes)
     }
 }

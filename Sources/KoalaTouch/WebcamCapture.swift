@@ -27,6 +27,8 @@ struct WebcamSettings: Codable, Equatable {
     var rotate: Int?
     /// DRIVE in dB (0…12), MPC3000 OUT and LIMITER (WebcamSound.swift).
     var drive: Double?, mpcOut: Bool?, limiter: Bool?
+    /// The limiter's threshold in dB (0 to −20; the ceiling is always −1 dBFS).
+    var threshold: Double?
     /// Where recordings go (a path); nil = ~/Movies/Koala Link.
     var folder: String?
     var folderURL: URL {
@@ -415,7 +417,7 @@ final class WebcamStudio {
     var meter: WebcamSoundChain.Meter { sound.reading }
 
     init() { configureSound() }
-    private func configureSound() { sound.configure(driveDB: settings.drive ?? 0, clip: settings.mpcOut ?? true, limit: settings.limiter ?? true) }
+    private func configureSound() { sound.configure(driveDB: settings.drive ?? 0, clip: settings.mpcOut ?? true, limit: settings.limiter ?? true, thresholdDB: settings.threshold ?? 0) }
     private let writerLock = NSLock()
     private var writer: WebcamWriter?
     private var format: CMVideoFormatDescription?
