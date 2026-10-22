@@ -27,6 +27,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     private let editLayout = NSButton(checkboxWithTitle: "Move things on the picture", target: nil, action: nil)
     private let canvas = WebcamLayoutCanvas(frame: NSRect(x: 20, y: 20, width: 800, height: 660))
     private var meterClock: Timer?
+    private let folderLabel = NSTextField(labelWithString: "")
 
     init() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1500, height: 700), styleMask: [.titled, .closable, .miniaturizable],
@@ -97,7 +98,12 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         place2(reset, height: 32, gap: 8)
         let hint = NSTextField(wrappingLabelWithString: "Drag the card, or Koala's screen in the tutorial layout; drag Koala's top-right corner to size it. Each shape and the tutorial layout keep their own places.")
         hint.font = NSFont.systemFont(ofSize: 12); hint.textColor = KoalaLook.muted
-        place2(hint, height: 64)
+        place2(hint, height: 56, gap: 6)
+        heading2("RECORDINGS GO TO")
+        let choose = NSButton(title: "CHOOSE FOLDER…", target: self, action: #selector(chooseFolder)); choose.bezelStyle = .rounded; choose.font = KoalaLook.font(16)
+        place2(choose, height: 32, gap: 4)
+        folderLabel.font = NSFont.systemFont(ofSize: 12); folderLabel.textColor = KoalaLook.foreground; folderLabel.lineBreakMode = .byTruncatingMiddle
+        place2(folderLabel, height: 18)
         canvas.onChange = { [weak self] layout, done in
             self?.studio.update(save: done) { $0.layouts = ($0.layouts ?? [:]).merging([$0.layoutKey: layout]) { $1 } }
         }
@@ -169,6 +175,21 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         drive.doubleValue = s.drive ?? 0; driveLabel.stringValue = String(format: "+%.1f dB", drive.doubleValue)
         mpcOut.state = s.mpcOut ?? true ? .on : .off; limiter.state = s.limiter ?? true ? .on : .off
         syncCanvas()
+        folderLabel.stringValue = (s.folderURL.path as NSString).abbreviatingWithTildeInPath
+    }
+
+    @objc private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false; panel.prompt = "Use This Folder"; panel.message = "Choose where Webcam recordings are saved"
+        panel.directoryURL = studio.settings.folderURL
+        guard let window else { return }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            self.studio.update { $0.folder = url.path }
+            self.folderLabel.stringValue = (url.path as NSString).abbreviatingWithTildeInPath
+            self.refreshNote()
+        }
     }
 
     @objc private func changed() {
@@ -210,7 +231,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
             clock?.invalidate(); clock = nil; recordStarted = nil
             showRecording()
             studio.stopRecording { [weak self] url in
-                self?.problem = url.map { "Saved \($0.lastPathComponent) in Movies › Koala Link." } ?? "The recording couldn't be saved."
+                self?.problem = url.map { "Saved \($0.lastPathComponent) in \(($0.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)." } ?? "The recording couldn't be saved."
                 self?.refreshNote()
                 if let url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }
@@ -298,7 +319,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         var lines = [problem].compactMap { $0 }
         lines.append(s.tutorial ? "Koala's window fills the picture with you in the corner." : "Your camera fills the picture.")
         lines.append("STUTTER, GATE, FILTER and CRUSH from the Push show on the picture. Effects touched on Koala's own screen can't be seen by Koala Link: hold STUTTER here instead.")
-        lines.append("Recordings go to Movies › Koala Link.")
+        lines.append("Recordings go to \((s.folderURL.path as NSString).abbreviatingWithTildeInPath).")
         note.stringValue = lines.joined(separator: "\n\n")
     }
 }

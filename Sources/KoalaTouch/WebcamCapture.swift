@@ -14,7 +14,8 @@ import ScreenCaptureKit
 //   corner (16:9) or under it (9:16). Effects apply to the picture; the overlay stays readable on top.
 // - **Effects**: what the controller sends Koala (KoalaPerformanceFeed): STUTTER repeats the picture on a 1/16 of the
 //   song's tempo, GATE blacks out the off 1/16s, FILTER blurs, CRUSH pixelates. Letting go returns to normal.
-// - **Files**: ~/Movies/Koala Link/Koala_Performance_<time>.mp4, hardware H.264 and AAC on the host clock.
+// - **Files**: Koala_Performance_<time>.mp4 in the chosen folder (~/Movies/Koala Link until one is chosen), hardware
+//   H.264 and AAC on the host clock.
 
 struct WebcamSettings: Codable, Equatable {
     var camera: String?
@@ -26,6 +27,12 @@ struct WebcamSettings: Codable, Equatable {
     var rotate: Int?
     /// DRIVE in dB (0…12), MPC3000 OUT and LIMITER (WebcamSound.swift).
     var drive: Double?, mpcOut: Bool?, limiter: Bool?
+    /// Where recordings go (a path); nil = ~/Movies/Koala Link.
+    var folder: String?
+    var folderURL: URL {
+        folder.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Movies/Koala Link", isDirectory: true)
+    }
     /// Where things sit for each shape and layout, dragged on the setup screen.
     var layouts: [String: WebcamLayout]?
     var layoutKey: String { (vertical ? "tall" : "wide") + (tutorial ? " tutorial" : "") }
@@ -483,7 +490,7 @@ final class WebcamStudio {
 
     var isRecording: Bool { writerLock.lock(); defer { writerLock.unlock() }; return writer != nil }
     func startRecording() throws -> URL {
-        let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Movies/Koala Link", isDirectory: true)
+        let folder = settings.folderURL
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let stamp = DateFormatter(); stamp.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         let url = folder.appendingPathComponent("Koala_Performance \(stamp.string(from: Date())) \(settings.vertical ? "9x16" : "16x9").mp4")
