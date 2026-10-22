@@ -19,13 +19,19 @@ final class WebcamOverlayPainter {
     /// The song's tempo (Koala's session files), for the effects' 1/16 grid.
     var bpm: Double { lock.lock(); defer { lock.unlock() }; return tempo }
 
-    func picture(feed: KoalaPerformanceFeed.Snapshot, level: Float, now: Double, vertical: Bool, frameSize: CGSize) -> CIImage? {
+    /// The card's size in a picture of `frameSize`.
+    static func cardSize(vertical: Bool, frameSize: CGSize) -> CGSize {
+        vertical ? CGSize(width: frameSize.width - 2 * (frameSize.width * 0.025).rounded(), height: 250) : CGSize(width: 680, height: 200)
+    }
+    /// The card at `origin` (0…1 of the picture, from the bottom left), kept inside the picture.
+    func picture(feed: KoalaPerformanceFeed.Snapshot, level: Float, now: Double, vertical: Bool, frameSize: CGSize, at origin: CGPoint) -> CIImage? {
         if let hit = feed.lastHit, hit.time != requested { requested = hit.time; load(hit) }
         lock.lock(); let pad = info; lock.unlock()
-        let margin = (frameSize.width * 0.025).rounded()
-        let size = vertical ? CGSize(width: frameSize.width - 2 * margin, height: 250) : CGSize(width: 680, height: 200)
+        let size = Self.cardSize(vertical: vertical, frameSize: frameSize)
+        let x = max(0, min(frameSize.width - size.width, (origin.x * frameSize.width).rounded()))
+        let y = max(0, min(frameSize.height - size.height, (origin.y * frameSize.height).rounded()))
         guard let image = draw(size: size, feed: feed, pad: pad, level: level, now: now) else { return nil }
-        return CIImage(cgImage: image).transformed(by: CGAffineTransform(translationX: margin, y: margin))
+        return CIImage(cgImage: image).transformed(by: CGAffineTransform(translationX: x, y: y))
     }
 
     // MARK: Pad name and waveform

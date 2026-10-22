@@ -18,18 +18,28 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     private let note = NSTextField(wrappingLabelWithString: "")
     private var problem: String?
     private var clock: Timer?, recordStarted: Date?
+    /// SOUND OUT and LAYOUT (the third column).
+    private let vu = WebcamVUView(frame: .zero)
+    private let drive = NSSlider(value: 0, minValue: 0, maxValue: 12, target: nil, action: nil)
+    private let driveLabel = NSTextField(labelWithString: "")
+    private let mpcOut = NSButton(checkboxWithTitle: "MPC3000 OUT (soft clip)", target: nil, action: nil)
+    private let limiter = NSButton(checkboxWithTitle: "Limiter at −1 dB", target: nil, action: nil)
+    private let editLayout = NSButton(checkboxWithTitle: "Move things on the picture", target: nil, action: nil)
+    private let canvas = WebcamLayoutCanvas(frame: NSRect(x: 20, y: 20, width: 800, height: 660))
+    private var meterClock: Timer?
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 700), styleMask: [.titled, .closable, .miniaturizable],
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1500, height: 700), styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered, defer: false)
         window.title = "Koala Link · Webcam"
         window.isReleasedWhenClosed = false; window.backgroundColor = KoalaLook.background
         window.appearance = NSAppearance(named: .darkAqua)
         super.init(window: window)
         window.delegate = self
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 1180, height: 700))
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 1500, height: 700))
         window.contentView = content
         content.addSubview(preview)
+        canvas.isHidden = true; content.addSubview(canvas)
 
         var y: CGFloat = 648
         let x: CGFloat = 845, width: CGFloat = 315
@@ -63,6 +73,35 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         soundPopup.target = self; soundPopup.action = #selector(changed)
         rotatePopup.target = self; rotatePopup.action = #selector(changed)
 
+        // SOUND OUT: what the recordings' sound goes through (WebcamSound.swift), and its VU.
+        var y2: CGFloat = 648
+        let x2: CGFloat = 1185, width2: CGFloat = 295
+        func place2(_ view: NSView, height: CGFloat, gap: CGFloat = 10) { view.frame = NSRect(x: x2, y: y2 - height, width: width2, height: height); content.addSubview(view); y2 -= height + gap }
+        func heading2(_ text: String) {
+            let label = NSTextField(labelWithString: text); label.font = KoalaLook.font(15); label.textColor = KoalaLook.muted
+            place2(label, height: 20, gap: 4)
+        }
+        let soundTitle = NSTextField(labelWithString: "SOUND OUT"); soundTitle.font = KoalaLook.font(30); soundTitle.textColor = KoalaLook.pink
+        place2(soundTitle, height: 38)
+        place2(vu, height: 160, gap: 12)
+        heading2("DRIVE"); driveLabel.font = KoalaLook.font(15); driveLabel.textColor = KoalaLook.foreground; driveLabel.alignment = .right
+        driveLabel.frame = NSRect(x: x2, y: y2 + 4, width: width2, height: 20); content.addSubview(driveLabel)
+        place2(drive, height: 24)
+        place2(mpcOut, height: 22, gap: 6); place2(limiter, height: 22, gap: 20)
+        for control in [drive, mpcOut, limiter] as [NSControl] { control.target = self; control.action = #selector(soundChanged) }
+        drive.isContinuous = true
+        let layoutTitle = NSTextField(labelWithString: "LAYOUT"); layoutTitle.font = KoalaLook.font(30); layoutTitle.textColor = KoalaLook.pink
+        place2(layoutTitle, height: 38)
+        editLayout.target = self; editLayout.action = #selector(toggleEditLayout); place2(editLayout, height: 22, gap: 8)
+        let reset = NSButton(title: "RESET LAYOUT", target: self, action: #selector(resetLayout)); reset.bezelStyle = .rounded; reset.font = KoalaLook.font(16)
+        place2(reset, height: 32, gap: 8)
+        let hint = NSTextField(wrappingLabelWithString: "Drag the camera, Koala's screen or the card on the picture; drag a box's top-right corner to size it. Each shape and the tutorial layout keep their own places.")
+        hint.font = NSFont.systemFont(ofSize: 12); hint.textColor = KoalaLook.muted
+        place2(hint, height: 64)
+        canvas.onChange = { [weak self] layout, done in
+            self?.studio.update(save: done) { $0.layouts = ($0.layouts ?? [:]).merging([$0.layoutKey: layout]) { $1 } }
+        }
+
         studio.onPicture = { [weak self] sample in
             self?.preview.show(sample)
             (self?.output?.contentView as? WebcamPictureView)?.show(sample)
@@ -76,6 +115,12 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     func open() {
         fillControls()
         studio.start()
+        if meterClock == nil {
+            meterClock = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+                guard let self else { return }
+                self.vu.reading = self.studio.meter
+            }
+        }
         showWindow(nil); window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         refreshNote()
@@ -98,6 +143,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     }
     private func shutDown() {
         disarm(); clock?.invalidate(); clock = nil; recordStarted = nil
+        meterClock?.invalidate(); meterClock = nil
         showRecording()
         KoalaPerformanceFeed.shared.setManualStutter(false)
         studio.stop()
@@ -120,6 +166,9 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         shape.selectedSegment = s.vertical ? 1 : 0
         rotatePopup.selectItem(at: s.rotate ?? 1)
         for (check, on) in zip(checks, [s.tutorial, s.overlay, s.effects, s.mirror]) { check.state = on ? .on : .off }
+        drive.doubleValue = s.drive ?? 0; driveLabel.stringValue = String(format: "+%.1f dB", drive.doubleValue)
+        mpcOut.state = s.mpcOut ?? true ? .on : .off; limiter.state = s.limiter ?? true ? .on : .off
+        syncCanvas()
     }
 
     @objc private func changed() {
@@ -135,8 +184,24 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
             $0.camera = camera ?? $0.camera; $0.audio = sound; $0.vertical = vertical; $0.rotate = rotate
             $0.tutorial = on[0]; $0.overlay = on[1]; $0.effects = on[2]; $0.mirror = on[3]
         }
-        sizeOutput()
+        sizeOutput(); syncCanvas()
         refreshNote()
+    }
+
+    @objc private func soundChanged() {
+        let value = (drive.doubleValue * 2).rounded() / 2, clip = mpcOut.state == .on, limit = limiter.state == .on
+        driveLabel.stringValue = String(format: "+%.1f dB", value)
+        let done = NSApp.currentEvent?.type != .leftMouseDragged
+        studio.update(save: done) { $0.drive = value; $0.mpcOut = clip; $0.limiter = limit }
+    }
+    @objc private func toggleEditLayout() { canvas.isHidden = editLayout.state != .on; syncCanvas() }
+    @objc private func resetLayout() {
+        studio.update { let key = $0.layoutKey; $0.layouts?[key] = nil }
+        syncCanvas()
+    }
+    private func syncCanvas() {
+        let s = studio.settings
+        canvas.vertical = s.vertical; canvas.tutorial = s.tutorial; canvas.layout = s.layout
     }
 
     @objc private func toggleRecording() {
@@ -254,6 +319,86 @@ final class WebcamPictureView: NSView {
     func show(_ sample: CMSampleBuffer) {
         if display.status == .failed { display.flush() }
         display.enqueue(sample)
+    }
+}
+
+/// LAYOUT: boxes for the camera, Koala's screen (tutorial) and the card over the preview, to move and size.
+final class WebcamLayoutCanvas: NSView {
+    var vertical = false { didSet { needsDisplay = true } }
+    var tutorial = false { didSet { needsDisplay = true } }
+    var layout = WebcamLayout.standard(vertical: false, tutorial: false) { didSet { needsDisplay = true } }
+    /// The new layout, and whether the drag is over.
+    var onChange: ((WebcamLayout, Bool) -> Void)?
+    private enum Part { case card, camera, koala }
+    private var drag: (part: Part, resize: Bool, start: NSPoint, from: WebcamLayout)?
+
+    /// Where the picture sits in the view (fitted, as the preview shows it).
+    private var picture: NSRect {
+        let aspect: CGFloat = vertical ? 9.0 / 16 : 16.0 / 9
+        let w = min(bounds.width, bounds.height * aspect), h = w / aspect
+        return NSRect(x: bounds.midX - w / 2, y: bounds.midY - h / 2, width: w, height: h)
+    }
+    private var cardSize: CGSize {
+        let frame = vertical ? CGSize(width: 1080, height: 1920) : CGSize(width: 1920, height: 1080)
+        let size = WebcamOverlayPainter.cardSize(vertical: vertical, frameSize: frame)
+        return CGSize(width: size.width / frame.width, height: size.height / frame.height)
+    }
+    private func rect(_ part: Part) -> CGRect {
+        switch part {
+        case .card: return CGRect(origin: layout.card, size: cardSize)
+        case .camera: return layout.camera
+        case .koala: return layout.koala
+        }
+    }
+    private func view(_ r: CGRect) -> NSRect {
+        let p = picture
+        return NSRect(x: p.minX + r.minX * p.width, y: p.minY + r.minY * p.height, width: r.width * p.width, height: r.height * p.height)
+    }
+    private var parts: [Part] { tutorial ? [.card, .camera, .koala] : [.card, .camera] }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { isHidden ? nil : (frame.contains(point) ? self : nil) }
+    override func mouseDown(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        for part in parts {
+            let r = view(rect(part))
+            let corner = part != .card && abs(p.x - r.maxX) < 16 && abs(p.y - r.maxY) < 16
+            if corner || r.contains(p) { drag = (part, corner, p, layout); return }
+        }
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard let drag else { return }
+        let p = convert(event.locationInWindow, from: nil), size = picture.size
+        let dx = (p.x - drag.start.x) / size.width, dy = (p.y - drag.start.y) / size.height
+        var next = drag.from
+        func moved(_ r: CGRect) -> CGRect {
+            CGRect(x: max(0, min(1 - r.width, r.minX + dx)), y: max(0, min(1 - r.height, r.minY + dy)), width: r.width, height: r.height)
+        }
+        func sized(_ r: CGRect) -> CGRect {
+            CGRect(x: r.minX, y: r.minY, width: max(0.1, min(1 - r.minX, r.width + dx)), height: max(0.1, min(1 - r.minY, r.height + dy)))
+        }
+        switch drag.part {
+        case .card: next.card = moved(CGRect(origin: next.card, size: cardSize)).origin
+        case .camera: next.camera = drag.resize ? sized(next.camera) : moved(next.camera)
+        case .koala: next.koala = drag.resize ? sized(next.koala) : moved(next.koala)
+        }
+        layout = next; onChange?(next, false)
+    }
+    override func mouseUp(with event: NSEvent) {
+        guard drag != nil else { return }
+        drag = nil; onChange?(layout, true)
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        let attributes: [NSAttributedString.Key: Any] = [.font: KoalaLook.font(15), .foregroundColor: NSColor.white]
+        for part in parts.reversed() {
+            let r = view(rect(part)).insetBy(dx: 1, dy: 1)
+            let colour: NSColor = part == .card ? KoalaLook.pink : part == .camera ? KoalaLook.blue : .systemYellow
+            colour.withAlphaComponent(0.12).setFill(); r.fill()
+            let outline = NSBezierPath(rect: r); outline.lineWidth = 2; outline.setLineDash([6, 4], count: 2, phase: 0)
+            colour.setStroke(); outline.stroke()
+            let name = (part == .card ? "CARD" : part == .camera ? "CAMERA" : "KOALA SCREEN") as NSString
+            name.draw(at: NSPoint(x: r.minX + 8, y: r.maxY - 22), withAttributes: attributes)
+            if part != .card { colour.setFill(); NSRect(x: r.maxX - 12, y: r.maxY - 12, width: 12, height: 12).fill() }
+        }
     }
 }
 

@@ -24,6 +24,12 @@ struct WebcamSettings: Codable, Equatable {
     /// 9:16 turns the camera a quarter: 1 = right (the default), 2 = left, 0 = not at all (optional so older saved
     /// settings still load).
     var rotate: Int?
+    /// DRIVE in dB (0…12), MPC3000 OUT and LIMITER (WebcamSound.swift).
+    var drive: Double?, mpcOut: Bool?, limiter: Bool?
+    /// Where things sit for each shape and layout, dragged on the setup screen.
+    var layouts: [String: WebcamLayout]?
+    var layoutKey: String { (vertical ? "tall" : "wide") + (tutorial ? " tutorial" : "") }
+    var layout: WebcamLayout { layouts?[layoutKey] ?? .standard(vertical: vertical, tutorial: tutorial) }
     private static let key = "KoalaLink.webcam"
     static func load() -> WebcamSettings {
         guard let data = UserDefaults.standard.data(forKey: key),
@@ -32,6 +38,18 @@ struct WebcamSettings: Codable, Equatable {
     }
     func save() { if let data = try? JSONEncoder().encode(self) { UserDefaults.standard.set(data, forKey: Self.key) } }
     var size: (w: Int, h: Int) { vertical ? (1080, 1920) : (1920, 1080) }
+}
+
+/// Where the camera, Koala's window and the card sit (0…1 of the picture, from the bottom left).
+struct WebcamLayout: Codable, Equatable {
+    var camera: CGRect, koala: CGRect, card: CGPoint
+    static func standard(vertical: Bool, tutorial: Bool) -> WebcamLayout {
+        let full = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let card = CGPoint(x: 0.025, y: vertical ? 0.014 : 0.044)
+        guard tutorial else { return WebcamLayout(camera: full, koala: full, card: card) }
+        if vertical { return WebcamLayout(camera: CGRect(x: 0, y: 0, width: 1, height: 0.42), koala: CGRect(x: 0, y: 0.42, width: 1, height: 0.58), card: card) }
+        return WebcamLayout(camera: CGRect(x: 0.705, y: 0.686, width: 0.27, height: 0.27), koala: full, card: card)
+    }
 }
 
 enum WebcamDevices {
@@ -379,16 +397,24 @@ final class WebcamStudio {
     private let queue = DispatchQueue(label: "Koala Link webcam", qos: .userInitiated)
     private var timer: DispatchSourceTimer?
     private let renderer = FrameRenderer(), fx = WebcamFX(), painter = WebcamOverlayPainter(), level = WebcamLevel()
+    private let sound = WebcamSoundChain()
+    /// The VU, peak and limiting of the processed sound.
+    var meter: WebcamSoundChain.Meter { sound.reading }
+
+    init() { configureSound() }
+    private func configureSound() { sound.configure(driveDB: settings.drive ?? 0, clip: settings.mpcOut ?? true, limit: settings.limiter ?? true) }
     private let writerLock = NSLock()
     private var writer: WebcamWriter?
     private var format: CMVideoFormatDescription?
 
-    func update(_ change: (inout WebcamSettings) -> Void) {
+    /// `save` false while a layout box is being dragged (saved when it is let go).
+    func update(save: Bool = true, _ change: (inout WebcamSettings) -> Void) {
         var next = settings; change(&next)
-        guard next != settings else { return }
+        guard next != settings else { if save { next.save() }; return }
         let reopen = next.camera != settings.camera || next.audio != settings.audio || next.tutorial != settings.tutorial
         queue.sync { settings = next }
-        next.save()
+        configureSound()
+        if save { next.save() }
         if reopen { closeSources(); openSources() }
     }
 
@@ -420,9 +446,10 @@ final class WebcamStudio {
         }
         let audio: (CMSampleBuffer) -> Void = { [weak self] sample in
             guard let self else { return }
-            self.level.add(sample)
+            let processed = self.sound.process(sample)
+            self.level.add(processed)
             self.writerLock.lock(); let writer = self.writer; self.writerLock.unlock()
-            writer?.appendAudio(sample)
+            writer?.appendAudio(processed)
         }
         if s.audio == "koala" || s.tutorial {
             let capture = KoalaScreenCapture()
@@ -475,22 +502,22 @@ final class WebcamStudio {
         var cam = camera?.frame.map { CIImage(cvPixelBuffer: $0) }
         if s.vertical, case let turn = s.rotate ?? 1, turn != 0 { cam = cam?.oriented(turn == 1 ? .right : .left) }
         if s.mirror { cam = cam?.oriented(.upMirrored) }
+        let layout = s.layout
+        func box(_ r: CGRect) -> CGRect {
+            CGRect(x: r.minX * frame.width, y: r.minY * frame.height, width: r.width * frame.width, height: r.height * frame.height).integral
+        }
         if s.tutorial, let koala = screen?.frame.map({ CIImage(cvPixelBuffer: $0) }) {
-            if s.vertical {
-                let top = CGRect(x: 0, y: frame.height * 0.42, width: frame.width, height: frame.height * 0.58)
-                picture = Self.place(koala, in: top, fill: false).composited(over: picture)
-                if let cam { picture = Self.place(cam, in: CGRect(x: 0, y: 0, width: frame.width, height: frame.height * 0.42), fill: true).composited(over: picture) }
-            } else {
-                picture = Self.place(koala, in: frame, fill: false).composited(over: picture)
-                if let cam {
-                    let pw = frame.width * 0.27, ph = pw * 9 / 16, margin = frame.width * 0.025
-                    let box = CGRect(x: frame.width - margin - pw, y: frame.height - margin - ph, width: pw, height: ph)
-                    picture = Self.place(cam, in: box, fill: true)
-                        .composited(over: CIImage(color: CIColor(cgColor: KoalaLook.blue.cgColor)).cropped(to: box.insetBy(dx: -5, dy: -5)))
-                        .composited(over: picture)
-                }
+            picture = Self.place(koala, in: box(layout.koala), fill: false).composited(over: picture)
+        }
+        if let cam {
+            // A camera that doesn't fill the picture gets a thin border.
+            let r = box(layout.camera)
+            var placed = Self.place(cam, in: r, fill: true)
+            if r.width < frame.width * 0.98, r.height < frame.height * 0.98 {
+                placed = placed.composited(over: CIImage(color: CIColor(cgColor: KoalaLook.blue.cgColor)).cropped(to: r.insetBy(dx: -5, dy: -5)))
             }
-        } else if let cam { picture = Self.place(cam, in: frame, fill: true).composited(over: picture) }
+            picture = placed.composited(over: picture)
+        }
         if s.effects {
             let bpm = painter.bpm, sixteenth = 15 / bpm
             var state = WebcamFX.State()
@@ -500,7 +527,7 @@ final class WebcamStudio {
             if let v = feed.fx["CRUSH"] { state.crush = Double(v) / 127 }
             picture = fx.process(picture, now: now, state: state, frame: frame)
         }
-        if s.overlay, let card = painter.picture(feed: feed, level: level.level, now: now, vertical: s.vertical, frameSize: frame.size) {
+        if s.overlay, let card = painter.picture(feed: feed, level: level.level, now: now, vertical: s.vertical, frameSize: frame.size, at: layout.card) {
             picture = card.composited(over: picture)
         }
         guard let buffer = renderer.render(picture, width: w, height: h) else { return }
