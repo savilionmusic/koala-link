@@ -95,7 +95,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         editLayout.target = self; editLayout.action = #selector(toggleEditLayout); place2(editLayout, height: 22, gap: 8)
         let reset = NSButton(title: "RESET LAYOUT", target: self, action: #selector(resetLayout)); reset.bezelStyle = .rounded; reset.font = KoalaLook.font(16)
         place2(reset, height: 32, gap: 8)
-        let hint = NSTextField(wrappingLabelWithString: "Drag the camera, Koala's screen or the card on the picture; drag a box's top-right corner to size it. Each shape and the tutorial layout keep their own places.")
+        let hint = NSTextField(wrappingLabelWithString: "Drag the card, or Koala's screen in the tutorial layout; drag Koala's top-right corner to size it. Each shape and the tutorial layout keep their own places.")
         hint.font = NSFont.systemFont(ofSize: 12); hint.textColor = KoalaLook.muted
         place2(hint, height: 64)
         canvas.onChange = { [weak self] layout, done in
@@ -322,7 +322,7 @@ final class WebcamPictureView: NSView {
     }
 }
 
-/// LAYOUT: boxes for the camera, Koala's screen (tutorial) and the card over the preview, to move and size.
+/// LAYOUT: boxes for Koala's screen (tutorial) and the card over the preview, to move (and Koala's screen to size).
 final class WebcamLayoutCanvas: NSView {
     var vertical = false { didSet { needsDisplay = true } }
     var tutorial = false { didSet { needsDisplay = true } }
@@ -354,7 +354,7 @@ final class WebcamLayoutCanvas: NSView {
         let p = picture
         return NSRect(x: p.minX + r.minX * p.width, y: p.minY + r.minY * p.height, width: r.width * p.width, height: r.height * p.height)
     }
-    private var parts: [Part] { tutorial ? [.card, .camera, .koala] : [.card, .camera] }
+    private var parts: [Part] { tutorial ? [.card, .koala] : [.card] }
 
     override func hitTest(_ point: NSPoint) -> NSView? { isHidden ? nil : (frame.contains(point) ? self : nil) }
     override func mouseDown(with event: NSEvent) {

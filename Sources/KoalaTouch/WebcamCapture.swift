@@ -29,7 +29,13 @@ struct WebcamSettings: Codable, Equatable {
     /// Where things sit for each shape and layout, dragged on the setup screen.
     var layouts: [String: WebcamLayout]?
     var layoutKey: String { (vertical ? "tall" : "wide") + (tutorial ? " tutorial" : "") }
-    var layout: WebcamLayout { layouts?[layoutKey] ?? .standard(vertical: vertical, tutorial: tutorial) }
+    /// The camera always keeps its standard place; Koala's screen and the card can be moved.
+    var layout: WebcamLayout {
+        let standard = WebcamLayout.standard(vertical: vertical, tutorial: tutorial)
+        guard var saved = layouts?[layoutKey] else { return standard }
+        saved.camera = standard.camera
+        return saved
+    }
     private static let key = "KoalaLink.webcam"
     static func load() -> WebcamSettings {
         guard let data = UserDefaults.standard.data(forKey: key),
