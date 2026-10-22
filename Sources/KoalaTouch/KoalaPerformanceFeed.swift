@@ -13,9 +13,13 @@ final class KoalaPerformanceFeed {
         /// Perform effects that are on, by name, with their amount (1–127).
         var fx: [String: Int] = [:]
         var chopperMode = false
-        /// STUTTER from the webcam window's own button (MPC Touch effects are touched on Koala's screen, not sent as MIDI).
-        var manualStutter = false
-        var stutterOn: Bool { manualStutter || fx["STUTTER"] != nil }
+        /// STUTTER from the webcam window's own button, and from touching Koala's own STUTTER (KoalaStutterTouch).
+        var manualStutter = false, touchStutter = false
+        var stutterOn: Bool { manualStutter || touchStutter || fx["STUTTER"] != nil }
+        /// When the stutter began (host seconds), for the video's repeats.
+        var stutterSince: Double?
+        /// Koala's page as the touch overlay last saw it ("sample", "sequence", "perform"); nil = not known.
+        var page: String?
     }
     private let lock = NSLock()
     private var state = Snapshot()
@@ -38,7 +42,13 @@ final class KoalaPerformanceFeed {
 
     var snapshot: Snapshot { lock.lock(); defer { lock.unlock() }; return state }
     func setChopperMode(_ on: Bool) { lock.lock(); state.chopperMode = on; lock.unlock() }
-    func setManualStutter(_ on: Bool) { lock.lock(); state.manualStutter = on; lock.unlock() }
+    func setManualStutter(_ on: Bool) { lock.lock(); state.manualStutter = on; settle(); lock.unlock() }
+    func setTouchStutter(_ on: Bool) { lock.lock(); state.touchStutter = on; settle(); lock.unlock() }
+    func setPage(_ page: String?) { lock.lock(); state.page = page; lock.unlock() }
+    /// Notes when the stutter begins and ends (lock held).
+    private func settle() {
+        if !state.stutterOn { state.stutterSince = nil } else if state.stutterSince == nil { state.stutterSince = Self.now() }
+    }
 
     func observe(_ bytes: [UInt8]) {
         var i = 0
@@ -68,5 +78,6 @@ final class KoalaPerformanceFeed {
             }
             i += length
         }
+        settle()
     }
 }

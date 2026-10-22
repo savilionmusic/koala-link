@@ -29,6 +29,8 @@ struct WebcamSettings: Codable, Equatable {
     var drive: Double?, mpcOut: Bool?, limiter: Bool?
     /// The limiter's threshold in dB (0 to −20; the ceiling is always −1 dBFS).
     var threshold: Double?
+    /// Where Koala's STUTTER is on its Perform page (0…1 of Koala's window, from the top left), learned by touch.
+    var stutterSpot: CGPoint?
     /// LISTEN: play the processed sound out of `listenDevice` (an output's unique ID; nil = the Mac's default).
     var listen: Bool?, listenDevice: String?
     /// Where recordings go (a path); nil = ~/Movies/Koala Link.
@@ -372,21 +374,26 @@ final class WebcamLevel {
 
 /// The effects Koala is playing, as pictures (Paper Cut's VisualFX, reduced to Koala's STUTTER, GATE, FILTER, CRUSH).
 final class WebcamFX {
-    struct State { var stutter = 0.0, gate = 0.0, filter = 0.0, crush = 0.0 }
+    /// `stutter`: the repeat length in seconds (0 = off), from `stutterStart` (host seconds).
+    struct State { var stutter = 0.0, stutterStart = 0.0, gate = 0.0, filter = 0.0, crush = 0.0 }
     private var history: [(time: Double, buffer: CVPixelBuffer)] = []
+    /// The last 0.4 s of pictures, kept all the time, so a stutter repeats from the moment it began even though
+    /// it is noticed a picture or two later.
+    private var recent: [(time: Double, buffer: CVPixelBuffer)] = []
     private var loopFrom: Double?
     private let store = FrameRenderer()
     func process(_ image: CIImage, now: Double, state: State, frame: CGRect) -> CIImage {
         var out = image
-        // STUTTER: keep what arrives for one repeat from the hit, then play it round again (half size, to save memory).
+        // A half-size copy of each picture (to save memory).
+        let half = image.transformed(by: CGAffineTransform(scaleX: 0.5, y: 0.5))
+        let copy = store.render(half, width: Int(frame.width / 2), height: Int(frame.height / 2))
+        if let copy { recent.append((now, copy)) }
+        while let first = recent.first, now - first.time > 0.4 { recent.removeFirst() }
+        // STUTTER: the pictures from the stutter's start (kept up to a second), played round at Koala's repeat length.
         if state.stutter > 0 {
-            let period = min(1, state.stutter)
-            if loopFrom == nil { loopFrom = now; history.removeAll() }
-            let from = loopFrom!
-            if now < from + period {
-                let half = image.transformed(by: CGAffineTransform(scaleX: 0.5, y: 0.5))
-                if let copy = store.render(half, width: Int(frame.width / 2), height: Int(frame.height / 2)) { history.append((now, copy)) }
-            }
+            let period = min(1, state.stutter), from = state.stutterStart
+            if loopFrom != from { loopFrom = from; history = recent.filter { $0.time >= from - 0.02 } }
+            else if now < from + 1, let copy { history.append((now, copy)) }
             let target = from + (now - from).truncatingRemainder(dividingBy: period)
             if let pick = history.last(where: { $0.time <= target }) ?? history.first {
                 out = CIImage(cvPixelBuffer: pick.buffer).transformed(by: CGAffineTransform(scaleX: 2, y: 2))
@@ -432,12 +439,19 @@ final class WebcamStudio {
     private var running = false
     private let renderer = FrameRenderer(), fx = WebcamFX(), painter = WebcamOverlayPainter(), level = WebcamLevel()
     private let sound = WebcamSoundChain()
+    private let stutterLength = StutterPeriodFinder()
+    /// Touches on Koala's STUTTER (main thread).
+    let stutterTouch = KoalaStutterTouch()
     private let monitorLock = NSLock()
     private var monitor: WebcamMonitor?
     /// The VU, peak and limiting of the processed sound.
     var meter: WebcamSoundChain.Meter { sound.reading }
 
-    init() { configureSound() }
+    init() {
+        configureSound()
+        stutterTouch.spot = settings.stutterSpot
+        stutterTouch.onLearned = { [weak self] spot in self?.update { $0.stutterSpot = spot } }
+    }
     private func configureSound() {
         let s = settings
         sound.configure(driveDB: s.drive ?? 0, clip: s.mpcOut ?? true, limit: s.limiter ?? true, thresholdDB: s.threshold ?? 0)
@@ -464,6 +478,7 @@ final class WebcamStudio {
         guard timer == nil else { return }
         running = true
         onProblem?(nil)
+        stutterTouch.start()
         setupQueue.async { self.openCamera(); self.openAudio(); self.restartMonitor() }
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now(), repeating: .milliseconds(33), leeway: .milliseconds(2))
@@ -474,6 +489,7 @@ final class WebcamStudio {
         stopRecording { _ in }
         timer?.cancel(); timer = nil
         running = false
+        stutterTouch.stop()
         setupQueue.async { self.restartMonitor(); self.closeCamera(); self.closeAudio() }
     }
 
@@ -547,6 +563,7 @@ final class WebcamStudio {
     }
     /// Processes a block of sound for the meter, the file and (other than the tap) LISTEN; returns it processed.
     private func handleAudio(_ sample: CMSampleBuffer) -> CMSampleBuffer {
+        stutterLength.add(sample)
         let processed = sound.process(sample)
         level.add(processed)
         writerLock.lock(); let writer = self.writer; writerLock.unlock()
@@ -602,7 +619,11 @@ final class WebcamStudio {
         if s.effects {
             let bpm = painter.bpm, sixteenth = 15 / bpm
             var state = WebcamFX.State()
-            if feed.stutterOn { state.stutter = sixteenth }
+            // Koala's own repeat length once it has repeated; a 1/16 until then.
+            if feed.stutterOn, let since = feed.stutterSince {
+                state.stutter = stutterLength.period(since: since, beat: 60 / bpm) ?? sixteenth
+                state.stutterStart = since
+            }
             if feed.fx["GATE"] != nil { state.gate = sixteenth }
             if let v = feed.fx["FILTER"] { state.filter = Double(v) / 127 }
             if let v = feed.fx["CRUSH"] { state.crush = Double(v) / 127 }

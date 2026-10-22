@@ -25,7 +25,7 @@ final class KoalaTouchOverlay: NSObject {
     private var bankButtons: [NSButton] = []
     private var mouseMonitor: Any?
     private var activationObserver: NSObjectProtocol?
-    private var page: Page = .sample
+    private var page: Page = .sample { didSet { KoalaPerformanceFeed.shared.setPage("\(page)") } }
     private var selectedBank = 0
     private var chopperMode = false
     private var active = false
@@ -86,6 +86,7 @@ final class KoalaTouchOverlay: NSObject {
 
     func stop() {
         closed = true
+        KoalaPerformanceFeed.shared.setPage(nil)
         keyboardPressPending = false
         session = UUID()
         pendingPresses.removeAll()

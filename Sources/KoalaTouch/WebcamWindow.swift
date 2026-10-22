@@ -6,7 +6,7 @@ import AVFoundation
 /// make the beat (it keeps the webcam running with this window closed). Opened from the start screen or the menu.
 final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     private let studio = WebcamStudio()
-    private let preview = WebcamPictureView(frame: NSRect(x: 20, y: 20, width: 800, height: 660))
+    private let preview = WebcamPictureView(frame: NSRect(x: 20, y: 20, width: 800, height: 710))
     private var output: NSWindow?, floating: NSPanel?, floatingPicture: WebcamPictureView?
     /// The preview's ARM: armed waits for the next pad (or key) to start recording; pressed again it disarms or stops.
     private let arm = WebcamFirstClickButton(title: "● ARM", target: nil, action: nil)
@@ -15,6 +15,8 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     private let shape = NSSegmentedControl(labels: ["16:9", "9:16"], trackingMode: .selectOne, target: nil, action: nil)
     private var checks: [NSButton] = []
     private let record = NSButton(title: "● RECORD", target: nil, action: nil)
+    /// LEARN: touch Koala's own STUTTER once so the video follows it.
+    private let learnStutter = NSButton(title: "", target: nil, action: nil)
     private let note = NSTextField(wrappingLabelWithString: "")
     private var problem: String?
     private var clock: Timer?, recordStarted: Date?
@@ -23,25 +25,25 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     private let strip = WebcamSoundStrip(frame: NSRect(x: 0, y: 0, width: 295, height: WebcamSoundStrip.height))
     private let floatingStrip = WebcamSoundStrip(frame: NSRect(x: 0, y: 0, width: 400, height: WebcamSoundStrip.height))
     private let editLayout = NSButton(checkboxWithTitle: "Move things on the picture", target: nil, action: nil)
-    private let canvas = WebcamLayoutCanvas(frame: NSRect(x: 20, y: 20, width: 800, height: 660))
+    private let canvas = WebcamLayoutCanvas(frame: NSRect(x: 20, y: 20, width: 800, height: 710))
     private var meterClock: Timer?
     private let folderLabel = NSTextField(labelWithString: "")
     private let listenPopup = NSPopUpButton()
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1500, height: 700), styleMask: [.titled, .closable, .miniaturizable],
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1500, height: 750), styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered, defer: false)
         window.title = "Koala Link · Webcam"
         window.isReleasedWhenClosed = false; window.backgroundColor = KoalaLook.background
         window.appearance = NSAppearance(named: .darkAqua)
         super.init(window: window)
         window.delegate = self
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 1500, height: 700))
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 1500, height: 750))
         window.contentView = content
         content.addSubview(preview)
         canvas.isHidden = true; content.addSubview(canvas)
 
-        var y: CGFloat = 648
+        var y: CGFloat = 698
         let x: CGFloat = 845, width: CGFloat = 315
         func place(_ view: NSView, height: CGFloat, gap: CGFloat = 10) { view.frame = NSRect(x: x, y: y - height, width: width, height: height); content.addSubview(view); y -= height + gap }
         func heading(_ text: String) {
@@ -65,7 +67,8 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         record.target = self; record.action = #selector(toggleRecording)
         let pop = NSButton(title: "OUTPUT WINDOW (FOR OBS)", target: self, action: #selector(toggleOutput))
         let mini = NSButton(title: "FLOATING PREVIEW", target: self, action: #selector(toggleFloating))
-        for button in [stutter, record, mini, pop] { button.bezelStyle = .rounded; button.font = KoalaLook.font(16); place(button, height: 32, gap: 6) }
+        learnStutter.target = self; learnStutter.action = #selector(learnKoalaStutter)
+        for button in [learnStutter, stutter, record, mini, pop] { button.bezelStyle = .rounded; button.font = KoalaLook.font(16); place(button, height: 32, gap: 6) }
         note.font = NSFont.systemFont(ofSize: 12); note.textColor = KoalaLook.muted
         note.frame = NSRect(x: x, y: 20, width: width, height: max(40, y - 24)); content.addSubview(note)
         shape.target = self; shape.action = #selector(changed)
@@ -74,7 +77,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         rotatePopup.target = self; rotatePopup.action = #selector(changed)
 
         // SOUND OUT: what the recordings' sound goes through (WebcamSound.swift), and its VU.
-        var y2: CGFloat = 648
+        var y2: CGFloat = 698
         let x2: CGFloat = 1185, width2: CGFloat = 295
         func place2(_ view: NSView, height: CGFloat, gap: CGFloat = 10) { view.frame = NSRect(x: x2, y: y2 - height, width: width2, height: height); content.addSubview(view); y2 -= height + gap }
         func heading2(_ text: String) {
@@ -172,6 +175,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         rotatePopup.selectItem(at: s.rotate ?? 1)
         for (check, on) in zip(checks, [s.tutorial, s.overlay, s.effects, s.mirror]) { check.state = on ? .on : .off }
         strip.show(s); floatingStrip.show(s)
+        showLearn()
         listenPopup.removeAllItems()
         listenPopup.addItem(withTitle: "Mac's default output")
         for output in WebcamAudioOutputs.all() { listenPopup.addItem(withTitle: output.name); listenPopup.lastItem?.representedObject = output.uid }
@@ -211,6 +215,18 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         refreshNote()
     }
 
+    @objc private func learnKoalaStutter() {
+        studio.stutterTouch.learning.toggle()
+        studio.stutterTouch.onLearned = { [weak self] spot in
+            self?.studio.update { $0.stutterSpot = spot }
+            self?.showLearn()
+        }
+        showLearn()
+    }
+    private func showLearn() {
+        learnStutter.title = studio.stutterTouch.learning ? "NOW TOUCH STUTTER ON KOALA…"
+            : studio.settings.stutterSpot == nil ? "LEARN KOALA'S STUTTER" : "KOALA'S STUTTER LEARNED ✓"
+    }
     @objc private func listenDeviceChanged() {
         let uid = listenPopup.selectedItem?.representedObject as? String
         studio.update { $0.listenDevice = uid }
@@ -326,7 +342,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         let s = studio.settings
         var lines = [problem].compactMap { $0 }
         lines.append(s.tutorial ? "Koala's window fills the picture with you in the corner." : "Your camera fills the picture.")
-        lines.append("STUTTER, GATE, FILTER and CRUSH from the Push show on the picture. Effects touched on Koala's own screen can't be seen by Koala Link: hold STUTTER here instead.")
+        lines.append(s.stutterSpot == nil ? "Touching STUTTER on Koala's screen: press LEARN KOALA'S STUTTER, then touch STUTTER on Koala's Perform page once. The video then stutters with it, at Koala's own timing." : "Touching STUTTER on Koala's Perform page stutters the video at Koala's own timing. GATE, FILTER and CRUSH from the Push show too.")
         lines.append("LISTEN swaps Koala's own sound for the one with DRIVE, MPC3000 OUT and the limiter, on the LISTEN THROUGH output.")
         lines.append("Recordings go to \((s.folderURL.path as NSString).abbreviatingWithTildeInPath).")
         note.stringValue = lines.joined(separator: "\n\n")
