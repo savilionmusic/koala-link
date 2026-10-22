@@ -250,8 +250,10 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         if studio.isRecording {
             clock?.invalidate(); clock = nil; recordStarted = nil
             showRecording()
-            studio.stopRecording { [weak self] url in
-                self?.problem = url.map { "Saved \($0.lastPathComponent) in \(($0.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)." } ?? "The recording couldn't be saved."
+            studio.stopRecording { [weak self] url, sound in
+                self?.problem = url.map { "Saved \($0.lastPathComponent) in \(($0.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)."
+                    + (sound ? "" : " It has NO SOUND: Koala's sound didn't reach Koala Link. Check Koala is open and playing, and Koala Link is allowed in System Settings › Privacy & Security › Screen & System Audio Recording.") }
+                    ?? "The recording couldn't be saved."
                 self?.refreshNote()
                 if let url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }

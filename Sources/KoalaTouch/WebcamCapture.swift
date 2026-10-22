@@ -318,10 +318,14 @@ final class WebcamWriter {
         guard !lastVideo.isValid || time > lastVideo, video.isReadyForMoreMediaData else { return }
         if adaptor.append(buffer, withPresentationTime: time) { lastVideo = time }
     }
+    /// Sound blocks written, refused, and arriving before the picture started (for the log and the warning).
+    private(set) var audioWritten = 0, audioRefused = 0, audioEarly = 0
     func appendAudio(_ sample: CMSampleBuffer) {
         lock.lock(); defer { lock.unlock() }
-        guard started, !finished, audio.isReadyForMoreMediaData else { return }
-        audio.append(sample)
+        guard !finished else { return }
+        guard started else { audioEarly += 1; return }
+        guard audio.isReadyForMoreMediaData, audio.append(sample) else { audioRefused += 1; return }
+        audioWritten += 1
     }
     func finish(_ done: @escaping (Bool) -> Void) {
         lock.lock()
@@ -511,7 +515,7 @@ final class WebcamStudio {
         t.resume(); timer = t
     }
     func stop() {
-        stopRecording { _ in }
+        stopRecording { _, _ in }
         timer?.cancel(); timer = nil
         running = false
         stutterTouch.stop()
@@ -587,7 +591,29 @@ final class WebcamStudio {
         old?.stop()
     }
     /// Processes a block of sound for the meter, the file and (other than the tap) LISTEN; returns it processed.
-    private func handleAudio(_ sample: CMSampleBuffer) -> CMSampleBuffer {
+    /// Seconds to add to a sound source whose stamps aren't on the host clock (nil = they are).
+    private var audioOffset: Double?
+    /// `sample` stamped on the host clock, as the pictures are: stamps more than half a second from now are moved to
+    /// end now (kept steady, moved again only if they drift by 0.1 s), so the file never drops the sound as out of time.
+    private func onHostClock(_ sample: CMSampleBuffer) -> CMSampleBuffer {
+        let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+        guard pts.isValid, let format = CMSampleBufferGetFormatDescription(sample),
+              let rate = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee.mSampleRate, rate > 0 else { return sample }
+        let end = pts.seconds + Double(CMSampleBufferGetNumSamples(sample)) / rate, now = KoalaPerformanceFeed.now()
+        if abs(now - end) < 0.5 { audioOffset = nil; return sample }
+        if audioOffset.map({ abs(now - (end + $0)) > 0.1 }) ?? true {
+            audioOffset = now - end
+            PickerLog.write(String(format: "Webcam sound stamps are %.2f s off the host clock; moved onto it", now - end))
+        }
+        var timing = CMSampleTimingInfo(duration: CMSampleBufferGetDuration(sample),
+                                        presentationTimeStamp: CMTimeAdd(pts, CMTime(seconds: audioOffset ?? 0, preferredTimescale: CMTimeScale(rate))),
+                                        decodeTimeStamp: .invalid)
+        var copy: CMSampleBuffer?
+        CMSampleBufferCreateCopyWithNewTiming(allocator: nil, sampleBuffer: sample, sampleTimingEntryCount: 1, sampleTimingArray: &timing, sampleBufferOut: &copy)
+        return copy ?? sample
+    }
+    private func handleAudio(_ input: CMSampleBuffer) -> CMSampleBuffer {
+        let sample = onHostClock(input)
         stutterLength.add(sample)
         let processed = sound.process(sample)
         level.add(processed)
@@ -610,10 +636,13 @@ final class WebcamStudio {
         recordingURL = url
         return url
     }
-    func stopRecording(_ done: @escaping (URL?) -> Void) {
+    /// `done` gets the saved file (nil = not saved) and whether it has sound.
+    func stopRecording(_ done: @escaping (URL?, Bool) -> Void) {
         writerLock.lock(); let finishing = writer; writer = nil; writerLock.unlock()
-        guard let finishing else { done(nil); return }
-        finishing.finish { ok in DispatchQueue.main.async { done(ok ? finishing.url : nil) } }
+        guard let finishing else { done(nil, false); return }
+        PickerLog.write("Webcam recording \(finishing.url.lastPathComponent): sound blocks written \(finishing.audioWritten), refused \(finishing.audioRefused), before the picture \(finishing.audioEarly)")
+        let sound = finishing.audioWritten > 0
+        finishing.finish { ok in DispatchQueue.main.async { done(ok ? finishing.url : nil, sound) } }
     }
 
     /// 30 times a second on `queue`: compose, record, show.
