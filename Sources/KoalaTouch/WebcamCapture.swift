@@ -378,7 +378,10 @@ final class WebcamLevel {
 /// The effects Koala is playing, as pictures (Paper Cut's VisualFX, reduced to Koala's STUTTER, GATE, FILTER, CRUSH).
 final class WebcamFX {
     /// `stutter`: the repeat length in seconds (0 = off), from `stutterStart` (host seconds). `filter`: −1 (low-pass) to 1.
-    struct State { var stutter = 0.0, stutterStart = 0.0, gate = 0.0, filter = 0.0, crush = 0.0 }
+    /// `cutter`: the length of each cut (half on, half black; 0 = off).
+    struct State { var stutter = 0.0, stutterStart = 0.0, gate = 0.0, filter = 0.0, crush = 0.0, cutter = 0.0 }
+    /// An effect amount (1–127) as a note length in seconds: a quarter, 8th, 16th or 32nd note, shorter as the amount rises.
+    static func division(_ amount: Int, beat: Double) -> Double { beat / Double(1 << min(3, max(0, amount - 1) / 32)) }
     private var history: [(time: Double, buffer: CVPixelBuffer)] = []
     /// The last 0.4 s of pictures, kept all the time, so a stutter repeats from the moment it began even though
     /// it is noticed a picture or two later.
@@ -419,6 +422,10 @@ final class WebcamFX {
             out = out.applyingFilter("CIColorMatrix", parameters: ["inputRVector": CIVector(x: 0.08, y: 0, z: 0, w: 0),
                                                                     "inputGVector": CIVector(x: 0, y: 0.08, z: 0, w: 0),
                                                                     "inputBVector": CIVector(x: 0, y: 0, z: 0.08, w: 0)])
+        }
+        // CUTTER: the second half of each cut is black.
+        if state.cutter > 0, (now / state.cutter).truncatingRemainder(dividingBy: 1) >= 0.5 {
+            out = CIImage(color: .black)
         }
         return out.cropped(to: frame)
     }
@@ -633,14 +640,14 @@ final class WebcamStudio {
         if s.effects {
             let bpm = painter.bpm, sixteenth = 15 / bpm
             var state = WebcamFX.State()
-            // Koala's own repeat length once it has repeated; a 1/16 until then.
+            // Only STUTTER and CUTTER show in the picture. Turned by a knob, the amount sets the rate: a little = 1/4,
+            // then 1/8, 1/16, all the way = 1/32. From a button or a touch on Koala: Koala's own repeat length, once heard.
             if feed.stutterOn, let since = feed.stutterSince {
-                state.stutter = stutterLength.period(since: since, beat: 60 / bpm) ?? sixteenth
+                state.stutter = feed.fx["STUTTER"].map { WebcamFX.division($0, beat: 60 / bpm) }
+                    ?? stutterLength.period(since: since, beat: 60 / bpm) ?? sixteenth
                 state.stutterStart = since
             }
-            if feed.fx["GATE"] != nil { state.gate = sixteenth }
-            if let v = feed.fx["FILTER"] { state.filter = max(-1, min(1, (Double(v) - 64) / 63)) }
-            if let v = feed.fx["CRUSH"] { state.crush = Double(v) / 127 }
+            if let v = feed.fx["CUTTER"] { state.cutter = WebcamFX.division(v, beat: 60 / bpm) }
             picture = fx.process(picture, now: now, state: state, frame: frame)
         }
         if s.overlay, let card = painter.picture(feed: feed, level: level.level, now: now, vertical: s.vertical, frameSize: frame.size, at: layout.card) {
