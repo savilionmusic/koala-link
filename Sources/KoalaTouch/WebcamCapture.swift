@@ -157,6 +157,8 @@ final class KoalaScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private let lock = NSLock()
     private var latest: CVPixelBuffer?
     private var video = false, audio = false, region = CGRect.zero
+    /// Stopped before the stream had started: it is stopped as soon as it does.
+    private var stopped = false
     private var refresh: Timer?
     static let permission = "Allow Koala Link in System Settings › Privacy & Security › Screen & System Audio Recording, then reopen Webcam."
 
@@ -177,6 +179,7 @@ final class KoalaScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             stream.startCapture { error in
                 DispatchQueue.main.async {
                     if error != nil { done(Self.permission); return }
+                    if self.stopped { stream.stopCapture { _ in }; return }
                     self.stream = stream; self.region = rect
                     // Koala's window can move or resize: follow it.
                     if video { self.refresh = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.follow() } }
@@ -186,8 +189,12 @@ final class KoalaScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         }
     }
     func stop() {
-        refresh?.invalidate(); refresh = nil
-        stream?.stopCapture { _ in }; stream = nil
+        // The stream and the window-following timer are set on the main thread.
+        DispatchQueue.main.async {
+            self.stopped = true
+            self.refresh?.invalidate(); self.refresh = nil
+            self.stream?.stopCapture { _ in }; self.stream = nil
+        }
         lock.lock(); latest = nil; lock.unlock()
     }
     var frame: CVPixelBuffer? { lock.lock(); defer { lock.unlock() }; return latest }
@@ -403,78 +410,103 @@ final class WebcamFX {
 
 /// Cameras, Koala's sound and screen, the composed picture, the preview and the file.
 final class WebcamStudio {
-    private(set) var settings = WebcamSettings.load()
+    private let settingsLock = NSLock()
+    private var stored = WebcamSettings.load()
+    /// Read on any thread, changed through `update`: the main thread never waits for the compositor.
+    var settings: WebcamSettings { settingsLock.lock(); defer { settingsLock.unlock() }; return stored }
     /// The composed picture for the window (main thread).
     var onPicture: ((CMSampleBuffer) -> Void)?
     var onProblem: ((String?) -> Void)?
     private(set) var recordingURL: URL?
-    /// Set on the main thread, read by `tick` (under `sourceLock`).
-    private var camera: WebcamCamera?, screen: KoalaScreenCapture?, microphone: WebcamMicrophone?
+    /// Set on `setupQueue`, read by `tick` (under `sourceLock`).
+    private var camera: WebcamCamera?, screen: KoalaScreenCapture?
     private let sourceLock = NSLock()
+    /// Cameras, Koala's sound, inputs and LISTEN open and close here, in order and off the main thread (a camera
+    /// session or an aggregate device can take a moment). `microphone`, `koalaTap` and `monitor` changes happen here.
+    private let setupQueue = DispatchQueue(label: "Koala Link webcam setup", qos: .userInitiated)
+    private var microphone: WebcamMicrophone?
+    /// Koala's sound through a process tap, which handles LISTEN itself (KoalaAudioTap.swift).
+    private var koalaTap: AnyObject?
     private let queue = DispatchQueue(label: "Koala Link webcam", qos: .userInitiated)
     private var timer: DispatchSourceTimer?
+    private var running = false
     private let renderer = FrameRenderer(), fx = WebcamFX(), painter = WebcamOverlayPainter(), level = WebcamLevel()
     private let sound = WebcamSoundChain()
     private let monitorLock = NSLock()
     private var monitor: WebcamMonitor?
-    /// Koala's sound through a process tap, which handles LISTEN itself (KoalaAudioTap.swift).
-    private var koalaTap: AnyObject?
-    private func restartMonitor() {
-        let next = settings.listen == true && timer != nil && koalaTap == nil ? WebcamMonitor(deviceUID: settings.listenDevice) : nil
-        monitorLock.lock(); let old = monitor; monitor = next; monitorLock.unlock()
-        old?.stop()
-    }
     /// The VU, peak and limiting of the processed sound.
     var meter: WebcamSoundChain.Meter { sound.reading }
 
     init() { configureSound() }
-    private func configureSound() { sound.configure(driveDB: settings.drive ?? 0, clip: settings.mpcOut ?? true, limit: settings.limiter ?? true, thresholdDB: settings.threshold ?? 0) }
+    private func configureSound() {
+        let s = settings
+        sound.configure(driveDB: s.drive ?? 0, clip: s.mpcOut ?? true, limit: s.limiter ?? true, thresholdDB: s.threshold ?? 0)
+    }
     private let writerLock = NSLock()
     private var writer: WebcamWriter?
     private var format: CMVideoFormatDescription?
 
-    /// `save` false while a layout box is being dragged (saved when it is let go).
+    /// `save` false while a slider or layout box is being dragged (saved when it is let go).
     func update(save: Bool = true, _ change: (inout WebcamSettings) -> Void) {
-        let old = settings
-        var next = settings; change(&next)
-        guard next != settings else { if save { next.save() }; return }
-        let reopen = next.camera != settings.camera || next.audio != settings.audio || next.tutorial != settings.tutorial
-            || (next.audio == "koala" && (next.listen != settings.listen || next.listenDevice != settings.listenDevice))
-        queue.sync { settings = next }
-        configureSound()
-        if next.listen != old.listen || next.listenDevice != old.listenDevice { restartMonitor() }
+        settingsLock.lock(); let old = stored; var next = stored; change(&next); stored = next; settingsLock.unlock()
         if save { next.save() }
-        if reopen { closeSources(); openSources() }
+        guard next != old else { return }
+        configureSound()
+        guard running else { return }
+        if next.camera != old.camera { setupQueue.async { self.closeCamera(); self.openCamera() } }
+        let listenChanged = next.listen != old.listen || next.listenDevice != old.listenDevice
+        if next.audio != old.audio || next.tutorial != old.tutorial || (next.audio == "koala" && listenChanged) {
+            setupQueue.async { self.closeAudio(); self.openAudio(); self.restartMonitor() }
+        } else if listenChanged { setupQueue.async { self.restartMonitor() } }
     }
 
     func start() {
         guard timer == nil else { return }
-        openSources()
+        running = true
+        onProblem?(nil)
+        setupQueue.async { self.openCamera(); self.openAudio(); self.restartMonitor() }
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now(), repeating: .milliseconds(33), leeway: .milliseconds(2))
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume(); timer = t
-        restartMonitor()
     }
     func stop() {
         stopRecording { _ in }
         timer?.cancel(); timer = nil
-        restartMonitor()
-        closeSources()
+        running = false
+        setupQueue.async { self.restartMonitor(); self.closeCamera(); self.closeAudio() }
     }
 
-    private func openSources() {
+    private func report(_ text: String?) { DispatchQueue.main.async { [weak self] in self?.onProblem?(text) } }
+    /// Asks for camera or microphone access (on `setupQueue`, which may wait for the answer).
+    private func access(_ type: AVMediaType) -> Bool {
+        if AVCaptureDevice.authorizationStatus(for: type) == .authorized { return true }
+        let answered = DispatchSemaphore(value: 0)
+        var granted = false
+        AVCaptureDevice.requestAccess(for: type) { granted = $0; answered.signal() }
+        answered.wait()
+        return granted
+    }
+
+    private func openCamera() {
+        guard running else { return }
         let s = settings
-        onProblem?(nil)
-        AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                guard granted else { self.onProblem?("Allow Koala Link in System Settings › Privacy & Security › Camera."); return }
-                let devices = WebcamDevices.cameras()
-                guard let device = devices.first(where: { $0.uniqueID == s.camera }) ?? devices.first else { self.onProblem?("No camera found."); return }
-                do { let c = try WebcamCamera(device: device); c.start(); self.sourceLock.lock(); self.camera = c; self.sourceLock.unlock() } catch { self.onProblem?(error.localizedDescription) }
-            }
-        }
+        guard access(.video) else { report("Allow Koala Link in System Settings › Privacy & Security › Camera."); return }
+        let devices = WebcamDevices.cameras()
+        guard let device = devices.first(where: { $0.uniqueID == s.camera }) ?? devices.first else { report("No camera found."); return }
+        do {
+            let c = try WebcamCamera(device: device); c.start()
+            sourceLock.lock(); camera = c; sourceLock.unlock()
+        } catch { report(error.localizedDescription) }
+    }
+    private func closeCamera() {
+        sourceLock.lock(); let c = camera; camera = nil; sourceLock.unlock()
+        c?.stop()
+    }
+
+    private func openAudio() {
+        guard running else { return }
+        let s = settings
         let audio: (CMSampleBuffer) -> Void = { [weak self] sample in _ = self?.handleAudio(sample) }
         // Koala's sound: a process tap where macOS has them (LISTEN switches Koala's dry sound for the processed one),
         // otherwise ScreenCaptureKit.
@@ -485,7 +517,7 @@ final class WebcamStudio {
                 let tap = try KoalaAudioTap(pid: koala.processIdentifier, listen: s.listen == true, outputUID: s.listenDevice)
                 tap.onAudio = { [weak self] sample in self?.handleAudio(sample) }
                 koalaTap = tap; tapped = true
-            } catch { onProblem?(error.localizedDescription) }
+            } catch { report(error.localizedDescription) }
         }
         if (s.audio == "koala" && !tapped) || s.tutorial {
             let capture = KoalaScreenCapture()
@@ -495,15 +527,23 @@ final class WebcamStudio {
             sourceLock.lock(); screen = capture; sourceLock.unlock()
         }
         if s.audio != "koala" {
-            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
-                DispatchQueue.main.async {
-                    guard let self else { return }
-                    guard granted else { self.onProblem?("Allow Koala Link in System Settings › Privacy & Security › Microphone."); return }
-                    guard let device = WebcamDevices.microphones().first(where: { $0.uniqueID == s.audio }) else { self.onProblem?("That audio input isn't connected."); return }
-                    do { let m = try WebcamMicrophone(device: device); m.onAudio = audio; m.start(); self.microphone = m } catch { self.onProblem?(error.localizedDescription) }
-                }
-            }
+            guard access(.audio) else { report("Allow Koala Link in System Settings › Privacy & Security › Microphone."); return }
+            guard let device = WebcamDevices.microphones().first(where: { $0.uniqueID == s.audio }) else { report("That audio input isn't connected."); return }
+            do { let m = try WebcamMicrophone(device: device); m.onAudio = audio; m.start(); microphone = m } catch { report(error.localizedDescription) }
         }
+    }
+    private func closeAudio() {
+        if #available(macOS 14.2, *) { (koalaTap as? KoalaAudioTap)?.stop() }
+        koalaTap = nil
+        sourceLock.lock(); let s = screen; screen = nil; sourceLock.unlock()
+        s?.stop()
+        microphone?.stop(); microphone = nil
+    }
+    /// LISTEN for sources other than the tap (an audio input, or Koala on older macOS).
+    private func restartMonitor() {
+        let next = running && settings.listen == true && koalaTap == nil ? WebcamMonitor(deviceUID: settings.listenDevice) : nil
+        monitorLock.lock(); let old = monitor; monitor = next; monitorLock.unlock()
+        old?.stop()
     }
     /// Processes a block of sound for the meter, the file and (other than the tap) LISTEN; returns it processed.
     private func handleAudio(_ sample: CMSampleBuffer) -> CMSampleBuffer {
@@ -514,13 +554,6 @@ final class WebcamStudio {
         monitorLock.lock(); let monitor = self.monitor; monitorLock.unlock()
         monitor?.play(processed)
         return processed
-    }
-    private func closeSources() {
-        if #available(macOS 14.2, *) { (koalaTap as? KoalaAudioTap)?.stop() }
-        koalaTap = nil
-        sourceLock.lock(); let sources = (camera, screen); camera = nil; screen = nil; sourceLock.unlock()
-        sources.0?.stop(); sources.1?.stop()
-        microphone?.stop(); microphone = nil
     }
 
     var isRecording: Bool { writerLock.lock(); defer { writerLock.unlock() }; return writer != nil }
