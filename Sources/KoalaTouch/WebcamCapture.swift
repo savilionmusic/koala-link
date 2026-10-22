@@ -417,8 +417,10 @@ final class WebcamStudio {
     private let sound = WebcamSoundChain()
     private let monitorLock = NSLock()
     private var monitor: WebcamMonitor?
+    /// Koala's sound through a process tap, which handles LISTEN itself (KoalaAudioTap.swift).
+    private var koalaTap: AnyObject?
     private func restartMonitor() {
-        let next = settings.listen == true && timer != nil ? WebcamMonitor(deviceUID: settings.listenDevice) : nil
+        let next = settings.listen == true && timer != nil && koalaTap == nil ? WebcamMonitor(deviceUID: settings.listenDevice) : nil
         monitorLock.lock(); let old = monitor; monitor = next; monitorLock.unlock()
         old?.stop()
     }
@@ -437,6 +439,7 @@ final class WebcamStudio {
         var next = settings; change(&next)
         guard next != settings else { if save { next.save() }; return }
         let reopen = next.camera != settings.camera || next.audio != settings.audio || next.tutorial != settings.tutorial
+            || (next.audio == "koala" && (next.listen != settings.listen || next.listenDevice != settings.listenDevice))
         queue.sync { settings = next }
         configureSound()
         if next.listen != old.listen || next.listenDevice != old.listenDevice { restartMonitor() }
@@ -472,20 +475,23 @@ final class WebcamStudio {
                 do { let c = try WebcamCamera(device: device); c.start(); self.sourceLock.lock(); self.camera = c; self.sourceLock.unlock() } catch { self.onProblem?(error.localizedDescription) }
             }
         }
-        let audio: (CMSampleBuffer) -> Void = { [weak self] sample in
-            guard let self else { return }
-            let processed = self.sound.process(sample)
-            self.level.add(processed)
-            self.writerLock.lock(); let writer = self.writer; self.writerLock.unlock()
-            writer?.appendAudio(processed)
-            self.monitorLock.lock(); let monitor = self.monitor; self.monitorLock.unlock()
-            monitor?.play(processed)
+        let audio: (CMSampleBuffer) -> Void = { [weak self] sample in _ = self?.handleAudio(sample) }
+        // Koala's sound: a process tap where macOS has them (LISTEN switches Koala's dry sound for the processed one),
+        // otherwise ScreenCaptureKit.
+        var tapped = false
+        if s.audio == "koala", #available(macOS 14.2, *),
+           let koala = NSRunningApplication.runningApplications(withBundleIdentifier: KoalaScreenCapture.bundleID).first(where: { !$0.isTerminated }) {
+            do {
+                let tap = try KoalaAudioTap(pid: koala.processIdentifier, listen: s.listen == true, outputUID: s.listenDevice)
+                tap.onAudio = { [weak self] sample in self?.handleAudio(sample) }
+                koalaTap = tap; tapped = true
+            } catch { onProblem?(error.localizedDescription) }
         }
-        if s.audio == "koala" || s.tutorial {
+        if (s.audio == "koala" && !tapped) || s.tutorial {
             let capture = KoalaScreenCapture()
-            if s.audio == "koala" { capture.onAudio = audio }
+            if s.audio == "koala" && !tapped { capture.onAudio = audio }
             capture.onStop = { [weak self] text in self?.onProblem?(text) }
-            capture.start(video: s.tutorial, audio: s.audio == "koala") { [weak self] problem in if let problem { self?.onProblem?(problem) } }
+            capture.start(video: s.tutorial, audio: s.audio == "koala" && !tapped) { [weak self] problem in if let problem { self?.onProblem?(problem) } }
             sourceLock.lock(); screen = capture; sourceLock.unlock()
         }
         if s.audio != "koala" {
@@ -499,7 +505,19 @@ final class WebcamStudio {
             }
         }
     }
+    /// Processes a block of sound for the meter, the file and (other than the tap) LISTEN; returns it processed.
+    private func handleAudio(_ sample: CMSampleBuffer) -> CMSampleBuffer {
+        let processed = sound.process(sample)
+        level.add(processed)
+        writerLock.lock(); let writer = self.writer; writerLock.unlock()
+        writer?.appendAudio(processed)
+        monitorLock.lock(); let monitor = self.monitor; monitorLock.unlock()
+        monitor?.play(processed)
+        return processed
+    }
     private func closeSources() {
+        if #available(macOS 14.2, *) { (koalaTap as? KoalaAudioTap)?.stop() }
+        koalaTap = nil
         sourceLock.lock(); let sources = (camera, screen); camera = nil; screen = nil; sourceLock.unlock()
         sources.0?.stop(); sources.1?.stop()
         microphone?.stop(); microphone = nil

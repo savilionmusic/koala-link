@@ -327,7 +327,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         var lines = [problem].compactMap { $0 }
         lines.append(s.tutorial ? "Koala's window fills the picture with you in the corner." : "Your camera fills the picture.")
         lines.append("STUTTER, GATE, FILTER and CRUSH from the Push show on the picture. Effects touched on Koala's own screen can't be seen by Koala Link: hold STUTTER here instead.")
-        lines.append("LISTEN plays the sound with DRIVE and the limiter. Koala plays its own sound too, so set Koala's output to a device you don't listen to (or turn it down) and LISTEN THROUGH the one you do.")
+        lines.append("LISTEN swaps Koala's own sound for the one with DRIVE, MPC3000 OUT and the limiter, on the LISTEN THROUGH output.")
         lines.append("Recordings go to \((s.folderURL.path as NSString).abbreviatingWithTildeInPath).")
         note.stringValue = lines.joined(separator: "\n\n")
     }

@@ -53,6 +53,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSCameraUsageDescription</key><string>Koala Link's Webcam shows and records your camera with Koala's sound.</string>
+  <key>NSAudioCaptureUsageDescription</key><string>Koala Link's Webcam records Koala's sound and lets you hear it with drive and the limiter.</string>
   <key>NSMicrophoneUsageDescription</key><string>Koala Link's Webcam records the audio input you choose.</string>
 </dict></plist>
 PLIST
