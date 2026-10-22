@@ -73,7 +73,7 @@ to chop 1; with 26, bank B pad 10 is chop 26 and pad 11 returns to chop 1.
 | PLAY | Ch1 note 82 | Ch15 note 82; Koala play toggle |
 
 Q-Link bank A has automatic start, length, volume and pitch assignments.
-Q-Link bank D drives Perform effect amounts: knobs 1–4 send Ch14 CC28 (STUTTER), CC35 (TALKBOX), CC30 (FILTER) and CC31 (CUTTER).
+Q-Link bank D drives Perform effect amounts: knobs 1–4 send Ch14 CC28 (STUTTER), CC35 (TALKBOX), CC30 (FILTER) and CC31 (CUTTER). A quarter of a knob's travel covers an effect's whole range, and turning it all the way down switches the effect off.
 Q-Link banks B and C are available for custom MIDI Learn. Other Public
 controls are forwarded on channel 15; forwarding alone does not give a
 control an automatic Koala assignment.
