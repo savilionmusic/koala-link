@@ -7,7 +7,10 @@ import AVFoundation
 final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     private let studio = WebcamStudio()
     private let preview = WebcamPictureView(frame: NSRect(x: 20, y: 20, width: 800, height: 660))
-    private var output: NSWindow?, floating: NSPanel?
+    private var output: NSWindow?, floating: NSPanel?, floatingPicture: WebcamPictureView?
+    /// The preview's ARM: armed waits for the next pad (or key) to start recording; pressed again it disarms or stops.
+    private let arm = WebcamFirstClickButton(title: "● ARM", target: nil, action: nil)
+    private var armedAt: Double?, armWatch: Timer?
     private let cameraPopup = NSPopUpButton(), soundPopup = NSPopUpButton(), rotatePopup = NSPopUpButton()
     private let shape = NSSegmentedControl(labels: ["16:9", "9:16"], trackingMode: .selectOne, target: nil, action: nil)
     private var checks: [NSButton] = []
@@ -63,7 +66,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         studio.onPicture = { [weak self] sample in
             self?.preview.show(sample)
             (self?.output?.contentView as? WebcamPictureView)?.show(sample)
-            (self?.floating?.contentView as? WebcamPictureView)?.show(sample)
+            self?.floatingPicture?.show(sample)
         }
         studio.onProblem = { [weak self] text in self?.problem = text; self?.refreshNote() }
         window.center()
@@ -86,7 +89,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     /// The webcam stops once both this window and the floating preview are closed.
     func windowWillClose(_ notification: Notification) {
         if notification.object as? NSWindow === floating {
-            floating = nil
+            floating = nil; floatingPicture = nil
             if window?.isVisible != true { shutDown() }
             return
         }
@@ -94,8 +97,8 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         if floating == nil { shutDown() }
     }
     private func shutDown() {
-        clock?.invalidate(); clock = nil; recordStarted = nil
-        record.title = "● RECORD"
+        disarm(); clock?.invalidate(); clock = nil; recordStarted = nil
+        showRecording()
         KoalaPerformanceFeed.shared.setManualStutter(false)
         studio.stop()
     }
@@ -137,9 +140,10 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func toggleRecording() {
+        disarm()
         if studio.isRecording {
             clock?.invalidate(); clock = nil; recordStarted = nil
-            record.title = "● RECORD"
+            showRecording()
             studio.stopRecording { [weak self] url in
                 self?.problem = url.map { "Saved \($0.lastPathComponent) in Movies › Koala Link." } ?? "The recording couldn't be saved."
                 self?.refreshNote()
@@ -154,10 +158,32 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
             tickClock()
         } catch { problem = "Recording didn't start: \(error.localizedDescription)"; refreshNote() }
     }
-    private func tickClock() {
-        guard let recordStarted else { return }
-        let t = Int(Date().timeIntervalSince(recordStarted))
-        record.title = String(format: "■ STOP  %d:%02d", t / 60, t % 60)
+    private func tickClock() { showRecording() }
+    private func showRecording() {
+        if let recordStarted {
+            let t = Int(Date().timeIntervalSince(recordStarted)), time = String(format: "%d:%02d", t / 60, t % 60)
+            record.title = "■ STOP  " + time; arm.title = "■ STOP  " + time; arm.contentTintColor = KoalaLook.pink
+        } else {
+            record.title = "● RECORD"
+            arm.title = armedAt == nil ? "● ARM" : "ARMED · PLAY A PAD"
+            arm.contentTintColor = armedAt == nil ? nil : KoalaLook.pink
+        }
+    }
+
+    /// ARM on the preview: arm, disarm, or stop a recording.
+    @objc private func toggleArm() {
+        if studio.isRecording || armedAt != nil { armedAt == nil ? toggleRecording() : disarm(); return }
+        armedAt = KoalaPerformanceFeed.now(); showRecording()
+        // The first pad or key after arming starts the recording.
+        armWatch = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { [weak self] _ in
+            guard let self, let armedAt = self.armedAt else { return }
+            if let hit = KoalaPerformanceFeed.shared.snapshot.lastHit, hit.time > armedAt { self.toggleRecording() }
+        }
+    }
+    private func disarm() {
+        armWatch?.invalidate(); armWatch = nil
+        guard armedAt != nil else { return }
+        armedAt = nil; showRecording()
     }
 
     @objc private func toggleOutput() {
@@ -176,14 +202,20 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         panel.title = "Webcam"; panel.isFloatingPanel = true; panel.level = .floating; panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false; panel.delegate = self
-        panel.contentView = WebcamPictureView(frame: NSRect(x: 0, y: 0, width: 400, height: 225))
-        floating = panel; sizeOutput()
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 225 + Self.bar))
+        let picture = WebcamPictureView(frame: NSRect(x: 0, y: Self.bar, width: 400, height: 225))
+        arm.frame = NSRect(x: 6, y: 4, width: 388, height: Self.bar - 8); arm.autoresizingMask = [.width]
+        arm.bezelStyle = .rounded; arm.font = KoalaLook.font(15); arm.target = self; arm.action = #selector(toggleArm)
+        content.addSubview(picture); content.addSubview(arm)
+        panel.contentView = content
+        floating = panel; floatingPicture = picture; sizeOutput(); showRecording()
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
             panel.setFrameTopLeftPoint(NSPoint(x: f.maxX - panel.frame.width - 20, y: f.maxY - 20))
         }
         panel.orderFrontRegardless()
     }
+    private static let bar: CGFloat = 36
     private func sizeOutput() {
         let vertical = studio.settings.vertical
         if let output {
@@ -192,7 +224,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         }
         if let floating {
             let size = vertical ? NSSize(width: 225, height: 400) : NSSize(width: 400, height: 225)
-            floating.contentAspectRatio = size; floating.setContentSize(size)
+            floating.setContentSize(NSSize(width: size.width, height: size.height + Self.bar))
         }
     }
 
@@ -223,6 +255,11 @@ final class WebcamPictureView: NSView {
         if display.status == .failed { display.flush() }
         display.enqueue(sample)
     }
+}
+
+/// A button that works on the first click in the floating preview, which never takes focus from Koala.
+final class WebcamFirstClickButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 /// A button that reports being held down and let go.
