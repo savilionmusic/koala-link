@@ -66,8 +66,8 @@ final class KoalaPerformanceFeed {
             if on || off, let name = fxKeys[0x90 << 16 | UInt32(channel) << 8 | UInt32(number)] {
                 state.fx[name] = on ? Int(value) : nil
             } else if kind == 0xB0, let name = fxKeys[0xB0 << 16 | UInt32(channel) << 8 | UInt32(number)] {
-                // A knob a hair off its rest is still at rest for the picture.
-                let on = Self.centred.contains(name) ? abs(Int(value) - 64) > 5 : value >= 4
+                // 0 is off (Koala's); a knob a hair off its rest is still at rest for the picture.
+                let on = value > 0 && (Self.centred.contains(name) ? abs(Int(value) - 64) > 5 : value >= 4)
                 state.fx[name] = on ? Int(value) : nil
             } else if on || off, channel == 15 || channel == keyboardChannel {
                 // Channel 16: the pads (36–99) or, in Chopper keyboard mode, chops 1–64 (60–123). The Push's keyboard: notes.
