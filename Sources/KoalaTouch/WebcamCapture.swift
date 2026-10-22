@@ -21,6 +21,9 @@ struct WebcamSettings: Codable, Equatable {
     /// "koala" = Koala's own sound; otherwise an audio input's unique ID.
     var audio = "koala"
     var vertical = false, tutorial = false, overlay = true, effects = true, mirror = true
+    /// 9:16 turns the camera a quarter: 1 = right (the default), 2 = left, 0 = not at all (optional so older saved
+    /// settings still load).
+    var rotate: Int?
     private static let key = "KoalaLink.webcam"
     static func load() -> WebcamSettings {
         guard let data = UserDefaults.standard.data(forKey: key),
@@ -470,6 +473,7 @@ final class WebcamStudio {
         sourceLock.lock(); let camera = self.camera, screen = self.screen; sourceLock.unlock()
         var picture = CIImage(color: .black).cropped(to: frame)
         var cam = camera?.frame.map { CIImage(cvPixelBuffer: $0) }
+        if s.vertical, case let turn = s.rotate ?? 1, turn != 0 { cam = cam?.oriented(turn == 1 ? .right : .left) }
         if s.mirror { cam = cam?.oriented(.upMirrored) }
         if s.tutorial, let koala = screen?.frame.map({ CIImage(cvPixelBuffer: $0) }) {
             if s.vertical {

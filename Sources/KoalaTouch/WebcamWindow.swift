@@ -6,9 +6,9 @@ import AVFoundation
 /// make the beat (it keeps the webcam running with this window closed). Opened from the start screen or the menu.
 final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     private let studio = WebcamStudio()
-    private let preview = WebcamPictureView(frame: NSRect(x: 20, y: 20, width: 800, height: 560))
+    private let preview = WebcamPictureView(frame: NSRect(x: 20, y: 20, width: 800, height: 660))
     private var output: NSWindow?, floating: NSPanel?
-    private let cameraPopup = NSPopUpButton(), soundPopup = NSPopUpButton()
+    private let cameraPopup = NSPopUpButton(), soundPopup = NSPopUpButton(), rotatePopup = NSPopUpButton()
     private let shape = NSSegmentedControl(labels: ["16:9", "9:16"], trackingMode: .selectOne, target: nil, action: nil)
     private var checks: [NSButton] = []
     private let record = NSButton(title: "● RECORD", target: nil, action: nil)
@@ -17,18 +17,18 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     private var clock: Timer?, recordStarted: Date?
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 600), styleMask: [.titled, .closable, .miniaturizable],
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 700), styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered, defer: false)
         window.title = "Koala Link · Webcam"
         window.isReleasedWhenClosed = false; window.backgroundColor = KoalaLook.background
         window.appearance = NSAppearance(named: .darkAqua)
         super.init(window: window)
         window.delegate = self
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 1180, height: 600))
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 1180, height: 700))
         window.contentView = content
         content.addSubview(preview)
 
-        var y: CGFloat = 548
+        var y: CGFloat = 648
         let x: CGFloat = 845, width: CGFloat = 315
         func place(_ view: NSView, height: CGFloat, gap: CGFloat = 10) { view.frame = NSRect(x: x, y: y - height, width: width, height: height); content.addSubview(view); y -= height + gap }
         func heading(_ text: String) {
@@ -39,7 +39,9 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         place(title, height: 38)
         heading("CAMERA"); place(cameraPopup, height: 26)
         heading("SOUND"); place(soundPopup, height: 26)
-        heading("SHAPE"); place(shape, height: 26, gap: 14)
+        heading("SHAPE"); place(shape, height: 26)
+        heading("CAMERA IN 9:16"); place(rotatePopup, height: 26, gap: 14)
+        rotatePopup.addItems(withTitles: ["Upright (no turn)", "Turn right", "Turn left"])
         for (i, name) in ["Koala screen (tutorial)", "Pad and waveform overlay", "Video effects", "Mirror camera"].enumerated() {
             let check = NSButton(checkboxWithTitle: name, target: self, action: #selector(changed)); check.tag = i
             checks.append(check); place(check, height: 22, gap: 6)
@@ -56,6 +58,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         shape.target = self; shape.action = #selector(changed)
         cameraPopup.target = self; cameraPopup.action = #selector(changed)
         soundPopup.target = self; soundPopup.action = #selector(changed)
+        rotatePopup.target = self; rotatePopup.action = #selector(changed)
 
         studio.onPicture = { [weak self] sample in
             self?.preview.show(sample)
@@ -112,20 +115,21 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         }
         soundPopup.selectItem(at: soundPopup.itemArray.firstIndex(where: { $0.representedObject as? String == s.audio }) ?? 0)
         shape.selectedSegment = s.vertical ? 1 : 0
+        rotatePopup.selectItem(at: s.rotate ?? 1)
         for (check, on) in zip(checks, [s.tutorial, s.overlay, s.effects, s.mirror]) { check.state = on ? .on : .off }
     }
 
     @objc private func changed() {
         let camera = cameraPopup.selectedItem?.representedObject as? String
         let sound = soundPopup.selectedItem?.representedObject as? String ?? "koala"
-        let vertical = shape.selectedSegment == 1
+        let vertical = shape.selectedSegment == 1, rotate = rotatePopup.indexOfSelectedItem
         let on = checks.map { $0.state == .on }
         if studio.isRecording, vertical != studio.settings.vertical {
             shape.selectedSegment = studio.settings.vertical ? 1 : 0
             problem = "Stop recording before changing the shape."; refreshNote(); return
         }
         studio.update {
-            $0.camera = camera ?? $0.camera; $0.audio = sound; $0.vertical = vertical
+            $0.camera = camera ?? $0.camera; $0.audio = sound; $0.vertical = vertical; $0.rotate = rotate
             $0.tutorial = on[0]; $0.overlay = on[1]; $0.effects = on[2]; $0.mirror = on[3]
         }
         sizeOutput()
