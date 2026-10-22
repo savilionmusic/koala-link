@@ -34,6 +34,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
     private var bridge: KoalaMIDIBridge?
     private var pushBridge: PushKoalaBridge?
     private var choiceWindow: ControllerChoiceWindow?
+    private var webcam: WebcamWindowController?
     private var controllerChoice: KoalaControllerChoice?
     private var sessionGeneration = 0
     private var integration: KoalaIntegration?
@@ -80,6 +81,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         let main = NSMenu(), appItem = NSMenuItem(), appMenu = NSMenu()
         appMenu.addItem(item("Open Koala Again", #selector(openAgain), "o"))
         appMenu.addItem(item("Choose Controller…", #selector(chooseController), ""))
+        appMenu.addItem(item("Webcam…", #selector(openWebcam), "w"))
         appMenu.addItem(.separator())
         appMenu.addItem(item("Quit Koala Link", #selector(quit), "q"))
         appItem.submenu = appMenu; main.addItem(appItem); NSApp.mainMenu = main
@@ -88,6 +90,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(item("Open Koala Again", #selector(openAgain), "o"))
         menu.addItem(item("Choose Controller…", #selector(chooseController), ""))
+        menu.addItem(item("Webcam…", #selector(openWebcam), ""))
         menu.addItem(.separator())
         menu.addItem(item("Quit Koala Link", #selector(quit), "q"))
         status.menu = menu; statusItem = status
@@ -103,10 +106,16 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         if choiceWindow == nil {
             let choice = ControllerChoiceWindow()
             choice.onChoose = { [weak self] selected in self?.selectController(selected) }
+            choice.onWebcam = { [weak self] in self?.openWebcam() }
             choiceWindow = choice
         }
         choiceWindow?.showWindow(nil); choiceWindow?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+    /// WEBCAM (WebcamWindow.swift): opens beside whichever controller is in use.
+    @objc private func openWebcam() {
+        if webcam == nil { webcam = WebcamWindowController() }
+        webcam?.open()
     }
     private func selectController(_ selected: KoalaControllerChoice) {
         sessionGeneration += 1; retry?.invalidate(); retry = nil

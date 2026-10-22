@@ -6,6 +6,7 @@ enum KoalaControllerChoice: String { case mpcTouch, push2 }
 /// controller's MIDI session. The shared Touch service remains independent.
 final class ControllerChoiceWindow: NSWindowController {
     var onChoose: ((KoalaControllerChoice) -> Void)?
+    var onWebcam: (() -> Void)?
     init() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 380),
                               styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
@@ -29,8 +30,12 @@ final class ControllerChoiceWindow: NSWindowController {
         t.frame = NSRect(x: 35, y: 100, width: 320, height: 26); content.addSubview(t)
         let p = label("64 pads · Koala screens · encoders & strip", size: 16, color: KoalaLook.muted)
         p.frame = NSRect(x: 375, y: 100, width: 315, height: 26); content.addSubview(p)
-        let footer = label("You can change controllers from the Koala Link menu.", size: 16, color: KoalaLook.muted)
-        footer.frame = NSRect(x: 35, y: 35, width: 650, height: 28); content.addSubview(footer)
+        // Webcam setup sits beside the controller choice; it leaves this window open.
+        let webcam = KoalaChoiceButton(title: "WEBCAM SETUP", target: self, action: #selector(chooseWebcam))
+        webcam.isBordered = false; webcam.font = KoalaLook.font(18)
+        webcam.frame = NSRect(x: 35, y: 48, width: 650, height: 42); content.addSubview(webcam)
+        let footer = label("You can change controllers or open Webcam from the Koala Link menu.", size: 14, color: KoalaLook.muted)
+        footer.frame = NSRect(x: 35, y: 16, width: 650, height: 24); content.addSubview(footer)
         window.center()
     }
     required init?(coder: NSCoder) { fatalError("Not used") }
@@ -39,6 +44,7 @@ final class ControllerChoiceWindow: NSWindowController {
     }
     @objc private func chooseTouch() { close(); onChoose?(.mpcTouch) }
     @objc private func choosePush() { close(); onChoose?(.push2) }
+    @objc private func chooseWebcam() { onWebcam?() }
 }
 
 private final class KoalaChoiceBackground: NSView {

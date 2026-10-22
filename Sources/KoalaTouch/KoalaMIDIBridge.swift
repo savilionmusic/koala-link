@@ -285,6 +285,7 @@ final class KoalaMIDIBridge {
                 PickerLog.write("MPC pad bank \(String(UnicodeScalar(65 + bank)!)) · \(router.chopperMode ? "Chopper" : "Samples"), Ch16 notes \(first)–\(first + 15)")
                 if routingEnabled { DispatchQueue.main.async { [weak self] in self?.onPadBankChanged?(bank) } }
             case .chopperMode(let enabled):
+                KoalaPerformanceFeed.shared.setChopperMode(enabled)
                 if let origin { PickerLog.write("Keyboard mode \(enabled ? "on" : "off") · source: \(origin)") }
                 updateBankLEDs()
                 status(enabled ? "16 Levels · Chopper · banks A–D play chops 1–64, MIDI notes 60–123" : "16 Levels off · sample pads restored")
@@ -331,6 +332,7 @@ final class KoalaMIDIBridge {
             _ = bytes.withUnsafeBufferPointer { MIDIPacketListAdd(list, raw.count, packet, 0, $0.count, $0.baseAddress!) }
             MIDIReceived(virtualSource, list)
         }
+        KoalaPerformanceFeed.shared.observe(bytes)
     }
 
     private func status(_ text: String) {

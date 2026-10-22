@@ -52,6 +52,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSCameraUsageDescription</key><string>Koala Link's Webcam shows and records your camera with Koala's sound.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Koala Link's Webcam records the audio input you choose.</string>
 </dict></plist>
 PLIST
 # Sign the driver files as they are (already signed) and the app ad hoc; never re-sign mpc_touchd.

@@ -142,6 +142,7 @@ final class PushKoalaBridge {
             _ = bytes.withUnsafeBufferPointer { MIDIPacketListAdd(list, raw.count, packet, 0, $0.count, $0.baseAddress!) }
             MIDIReceived(source, list)
         }
+        KoalaPerformanceFeed.shared.observe(bytes)
     }
     private static func packetBytes(_ list: UnsafePointer<MIDIPacketList>) -> [UInt8] {
         var bytes: [UInt8] = []
