@@ -378,8 +378,9 @@ final class WebcamLevel {
 /// The effects Koala is playing, as pictures (Paper Cut's VisualFX, reduced to Koala's STUTTER, GATE, FILTER, CRUSH).
 final class WebcamFX {
     /// `stutter`: the repeat length in seconds (0 = off), from `stutterStart` (host seconds). `filter`: −1 (low-pass) to 1.
-    /// `cutter`: the length of each cut (half on, half black; 0 = off).
-    struct State { var stutter = 0.0, stutterStart = 0.0, gate = 0.0, filter = 0.0, crush = 0.0, cutter = 0.0 }
+    /// `cutter`: the length of each cut (half on, half black; 0 = off), counted from `cutterStart` so the first cut lands
+    /// on the turn of the knob.
+    struct State { var stutter = 0.0, stutterStart = 0.0, gate = 0.0, filter = 0.0, crush = 0.0, cutter = 0.0, cutterStart = 0.0 }
     /// An effect amount (1–127) as a note length in seconds: a quarter, 8th, 16th or 32nd note, shorter as the amount rises.
     static func division(_ amount: Int, beat: Double) -> Double { beat / Double(1 << min(3, max(0, amount - 1) / 32)) }
     private var history: [(time: Double, buffer: CVPixelBuffer)] = []
@@ -424,7 +425,7 @@ final class WebcamFX {
                                                                     "inputBVector": CIVector(x: 0, y: 0, z: 0.08, w: 0)])
         }
         // CUTTER: the second half of each cut is black.
-        if state.cutter > 0, (now / state.cutter).truncatingRemainder(dividingBy: 1) >= 0.5 {
+        if state.cutter > 0, ((now - state.cutterStart) / state.cutter).truncatingRemainder(dividingBy: 1) >= 0.5 {
             out = CIImage(color: .black)
         }
         return out.cropped(to: frame)
@@ -647,7 +648,7 @@ final class WebcamStudio {
                     ?? stutterLength.period(since: since, beat: 60 / bpm) ?? sixteenth
                 state.stutterStart = since
             }
-            if let v = feed.fx["CUTTER"] { state.cutter = WebcamFX.division(v, beat: 60 / bpm) }
+            if let v = feed.fx["CUTTER"] { state.cutter = WebcamFX.division(v, beat: 60 / bpm); state.cutterStart = feed.cutterSince ?? now }
             picture = fx.process(picture, now: now, state: state, frame: frame)
         }
         if s.overlay, let card = painter.picture(feed: feed, level: level.level, now: now, vertical: s.vertical, frameSize: frame.size, at: layout.card) {

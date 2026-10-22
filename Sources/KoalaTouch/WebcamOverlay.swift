@@ -102,7 +102,7 @@ final class WebcamOverlayPainter {
             cg.fill(CGRect(x: waveBox.minX, y: waveBox.midY - u, width: waveBox.width, height: 2 * u))
         }
         var x = left
-        for name in KoalaPushProfile.fxNames where feed.fx[name] != nil || (name == "STUTTER" && feed.stutterOn) {
+        for name in ["STUTTER", "CUTTER"] where feed.fx[name] != nil || (name == "STUTTER" && feed.stutterOn) {
             let width = chip(cg, name, at: CGPoint(x: x, y: inset + 12 * u), u: u)
             x += width + 8 * u
             if x > right - 60 * u { break }

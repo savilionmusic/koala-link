@@ -342,7 +342,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         let s = studio.settings
         var lines = [problem].compactMap { $0 }
         lines.append(s.tutorial ? "Koala's window fills the picture with you in the corner." : "Your camera fills the picture.")
-        lines.append(s.stutterSpot == nil ? "Touching STUTTER on Koala's screen: press LEARN KOALA'S STUTTER, then touch STUTTER on Koala's Perform page once. The video then stutters with it, at Koala's own timing." : "Touching STUTTER on Koala's Perform page stutters the video at Koala's own timing. GATE, FILTER and CRUSH from the Push show too.")
+        lines.append(s.stutterSpot == nil ? "Touching STUTTER on Koala's screen: press LEARN KOALA'S STUTTER, then touch STUTTER on Koala's Perform page once. The video then stutters with it, at Koala's own timing." : "Touching STUTTER on Koala's Perform page stutters the video at Koala's own timing. CUTTER cuts the picture to black in time; with a knob, a little is 1/4 notes and all the way is 1/32.")
         lines.append("LISTEN swaps Koala's own sound for the one with DRIVE, MPC3000 OUT and the limiter, on the LISTEN THROUGH output.")
         lines.append("Recordings go to \((s.folderURL.path as NSString).abbreviatingWithTildeInPath).")
         note.stringValue = lines.joined(separator: "\n\n")

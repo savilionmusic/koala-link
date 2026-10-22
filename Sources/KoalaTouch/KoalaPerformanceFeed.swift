@@ -18,7 +18,7 @@ final class KoalaPerformanceFeed {
         var manualStutter = false, touchStutter = false
         var stutterOn: Bool { manualStutter || touchStutter || fx["STUTTER"] != nil }
         /// When the stutter began (host seconds), for the video's repeats.
-        var stutterSince: Double?
+        var stutterSince: Double?, cutterSince: Double?
         /// Koala's page as the touch overlay last saw it ("sample", "sequence", "perform"); nil = not known.
         var page: String?
     }
@@ -50,6 +50,7 @@ final class KoalaPerformanceFeed {
     /// Notes when the stutter begins and ends (lock held).
     private func settle() {
         if !state.stutterOn { state.stutterSince = nil } else if state.stutterSince == nil { state.stutterSince = Self.now() }
+        if state.fx["CUTTER"] == nil { state.cutterSince = nil } else if state.cutterSince == nil { state.cutterSince = Self.now() }
     }
 
     func observe(_ bytes: [UInt8]) {
