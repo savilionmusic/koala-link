@@ -46,6 +46,13 @@ struct KoalaControlRouter {
     private var heldButtons = Set<UInt8>()
     private(set) var padBank = 0
     private(set) var qlinkBank = 0
+    /// Koala is on its Perform page: pad bank buttons A–D solo its buses 1–4.
+    var performSolo = false
+    private var soloSelectors = Set<UInt8>()
+    private static func soloKey(_ bus: Int) -> KoalaKey {
+        let address = "/mixer/channels/\(bus + 1)/solo/toggle"
+        return KoalaPushProfile.defaults.first { $0.address == address }!.key
+    }
     private(set) var chopperMode = false
     private(set) var fullLevel = false
     private var sampleBank = 0
@@ -120,6 +127,17 @@ struct KoalaControlRouter {
             let wasDown = streams.values.contains { $0.selectors.contains(number) }
             if down { streams[source]?.selectors.insert(number) }
             else { streams[source]?.selectors.remove(number) }
+            // On Koala's Perform page A–D solo its buses instead of switching banks; the press decides until its release.
+            if (0x23...0x26).contains(number) {
+                let key = Self.soloKey(Int(number - 0x23))
+                if up, !streams.values.contains(where: { $0.selectors.contains(number) }), soloSelectors.remove(number) != nil {
+                    return key.press(false).map { [.midi($0)] } ?? []
+                }
+                if down, !wasDown, performSolo {
+                    soloSelectors.insert(number)
+                    return key.press(true).map { [.midi($0)] } ?? []
+                }
+            }
             guard down && !wasDown else { return [] }
             if number == 0 {
                 qlinkBank = (qlinkBank + 1) % 4
@@ -221,6 +239,13 @@ struct KoalaControlRouter {
                 guard feed([0x99, raw, 99, 0x89, raw, 0]) == [.midi([0x9F, note, 99]), .midi([0x8F, note, 0])] else { return false }
             }
         }
+        // On Perform, A–D solo buses 1–4 (Ch14 notes) and leave the pad bank alone; the press decides until release.
+        router.performSolo = true
+        let bankBefore = router.padBank
+        let solo2 = Self.soloKey(1)
+        guard feed([0x90, 0x24, 127]) == [.midi(solo2.press(true)!)] else { return false }
+        router.performSolo = false
+        guard feed([0x80, 0x24, 0]) == [.midi(solo2.press(false)!)], router.padBank == bankBefore else { return false }
         return true
     }
 }
