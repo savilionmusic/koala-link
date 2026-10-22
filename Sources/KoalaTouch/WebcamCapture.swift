@@ -123,6 +123,7 @@ final class WebcamCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     private let queue = DispatchQueue(label: "Koala Link camera", qos: .userInitiated)
     private let lock = NSLock()
     private var latest: CVPixelBuffer?
+    private var count = 0
     private let copier = FrameRenderer()
     init(device: AVCaptureDevice) throws {
         super.init()
@@ -142,10 +143,12 @@ final class WebcamCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     func start() { queue.async { if !self.session.isRunning { self.session.startRunning() } } }
     func stop() { queue.async { if self.session.isRunning { self.session.stopRunning() } } }
     var frame: CVPixelBuffer? { lock.lock(); defer { lock.unlock() }; return latest }
+    /// How many frames have arrived (a new one means a new picture to make).
+    var frames: Int { lock.lock(); defer { lock.unlock() }; return count }
     func captureOutput(_ output: AVCaptureOutput, didOutput sample: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let buffer = CMSampleBufferGetImageBuffer(sample) else { return }
         let own = copier.render(CIImage(cvPixelBuffer: buffer), width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
-        lock.lock(); latest = own ?? buffer; lock.unlock()
+        lock.lock(); latest = own ?? buffer; count &+= 1; lock.unlock()
     }
 }
 
@@ -374,7 +377,7 @@ final class WebcamLevel {
 
 /// The effects Koala is playing, as pictures (Paper Cut's VisualFX, reduced to Koala's STUTTER, GATE, FILTER, CRUSH).
 final class WebcamFX {
-    /// `stutter`: the repeat length in seconds (0 = off), from `stutterStart` (host seconds).
+    /// `stutter`: the repeat length in seconds (0 = off), from `stutterStart` (host seconds). `filter`: −1 (low-pass) to 1.
     struct State { var stutter = 0.0, stutterStart = 0.0, gate = 0.0, filter = 0.0, crush = 0.0 }
     private var history: [(time: Double, buffer: CVPixelBuffer)] = []
     /// The last 0.4 s of pictures, kept all the time, so a stutter repeats from the moment it began even though
@@ -402,9 +405,15 @@ final class WebcamFX {
         if state.crush > 0 {
             out = out.applyingFilter("CIPixellate", parameters: [kCIInputScaleKey: 6 + 34 * state.crush, kCIInputCenterKey: CIVector(x: 0, y: 0)])
         }
-        if state.filter > 0 {
-            out = out.clampedToExtent().applyingGaussianBlur(sigma: 14 * state.filter)
-                .applyingFilter("CIColorControls", parameters: [kCIInputBrightnessKey: -0.2 * state.filter, kCIInputSaturationKey: 1 - 0.4 * state.filter])
+        // FILTER both ways, as Koala's: low-pass (below the middle) soft and dark, high-pass (above) hard and bleached.
+        if state.filter < 0 {
+            let f = -state.filter
+            out = out.clampedToExtent().applyingGaussianBlur(sigma: 14 * f)
+                .applyingFilter("CIColorControls", parameters: [kCIInputBrightnessKey: -0.2 * f, kCIInputSaturationKey: 1 - 0.4 * f])
+        } else if state.filter > 0 {
+            let f = state.filter
+            out = out.applyingFilter("CISharpenLuminance", parameters: [kCIInputSharpnessKey: 2.5 * f])
+                .applyingFilter("CIColorControls", parameters: [kCIInputBrightnessKey: 0.12 * f, kCIInputSaturationKey: 1 - 0.8 * f, kCIInputContrastKey: 1 + 0.9 * f])
         }
         if state.gate > 0, (now / state.gate).truncatingRemainder(dividingBy: 1) >= 0.5 {
             out = out.applyingFilter("CIColorMatrix", parameters: ["inputRVector": CIVector(x: 0.08, y: 0, z: 0, w: 0),
@@ -481,7 +490,7 @@ final class WebcamStudio {
         stutterTouch.start()
         setupQueue.async { self.openCamera(); self.openAudio(); self.restartMonitor() }
         let t = DispatchSource.makeTimerSource(queue: queue)
-        t.schedule(deadline: .now(), repeating: .milliseconds(33), leeway: .milliseconds(2))
+        t.schedule(deadline: .now(), repeating: .milliseconds(8), leeway: .milliseconds(1))
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume(); timer = t
     }
@@ -592,10 +601,15 @@ final class WebcamStudio {
     }
 
     /// 30 times a second on `queue`: compose, record, show.
+    private var lastCompose = 0.0, lastFrames = -1, lastFX: [String: Int] = [:], lastStutter = false
+    /// Every 8 ms on `queue`: a picture as soon as the camera has a new frame or an effect starts or stops (else 30 a second).
     private func tick() {
         let s = settings, (w, h) = s.size, frame = CGRect(x: 0, y: 0, width: w, height: h)
         let now = KoalaPerformanceFeed.now(), feed = KoalaPerformanceFeed.shared.snapshot
         sourceLock.lock(); let camera = self.camera, screen = self.screen; sourceLock.unlock()
+        let frames = camera?.frames ?? 0
+        guard frames != lastFrames || feed.stutterOn != lastStutter || feed.fx != lastFX || now - lastCompose >= 1.0 / 30 else { return }
+        lastFrames = frames; lastStutter = feed.stutterOn; lastFX = feed.fx; lastCompose = now
         var picture = CIImage(color: .black).cropped(to: frame)
         var cam = camera?.frame.map { CIImage(cvPixelBuffer: $0) }
         if s.vertical, case let turn = s.rotate ?? 1, turn != 0 { cam = cam?.oriented(turn == 1 ? .right : .left) }
@@ -625,7 +639,7 @@ final class WebcamStudio {
                 state.stutterStart = since
             }
             if feed.fx["GATE"] != nil { state.gate = sixteenth }
-            if let v = feed.fx["FILTER"] { state.filter = Double(v) / 127 }
+            if let v = feed.fx["FILTER"] { state.filter = max(-1, min(1, (Double(v) - 64) / 63)) }
             if let v = feed.fx["CRUSH"] { state.crush = Double(v) / 127 }
             picture = fx.process(picture, now: now, state: state, frame: frame)
         }

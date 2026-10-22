@@ -10,7 +10,8 @@ final class KoalaPerformanceFeed {
         var lastHit: Hit?
         /// Pads (or keyboard notes) held now, with when each began.
         var held: [Int: Double] = [:]
-        /// Perform effects that are on, by name, with their amount (1–127).
+        /// Perform effects that are on, by name, with their amount (1–127). FILTER, PITCH and VIBROFLANGE rest at the
+        /// middle (Koala's fx.json: 0.5), so they count as on only away from it.
         var fx: [String: Int] = [:]
         var chopperMode = false
         /// STUTTER from the webcam window's own button, and from touching Koala's own STUTTER (KoalaStutterTouch).
@@ -26,6 +27,7 @@ final class KoalaPerformanceFeed {
     /// Koala's effect keys: status byte & 0xF0, channel nibble, number → effect name.
     private var fxKeys: [UInt32: String] = [:]
 
+    static let centred: Set<String> = ["FILTER", "PITCH", "VIBROFLANGE"]
     private init() { reloadKeys() }
     static func now() -> Double { AVAudioTime.seconds(forHostTime: mach_absolute_time()) }
 
@@ -64,7 +66,9 @@ final class KoalaPerformanceFeed {
             if on || off, let name = fxKeys[0x90 << 16 | UInt32(channel) << 8 | UInt32(number)] {
                 state.fx[name] = on ? Int(value) : nil
             } else if kind == 0xB0, let name = fxKeys[0xB0 << 16 | UInt32(channel) << 8 | UInt32(number)] {
-                state.fx[name] = value > 0 ? Int(value) : nil
+                // A knob a hair off its rest is still at rest for the picture.
+                let on = Self.centred.contains(name) ? abs(Int(value) - 64) > 5 : value >= 4
+                state.fx[name] = on ? Int(value) : nil
             } else if on || off, channel == 15 || channel == keyboardChannel {
                 // Channel 16: the pads (36–99) or, in Chopper keyboard mode, chops 1–64 (60–123). The Push's keyboard: notes.
                 let keys = channel == keyboardChannel, chop = !keys && state.chopperMode
