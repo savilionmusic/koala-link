@@ -192,3 +192,75 @@ final class WebcamDBMeter: NSView {
         }
     }
 }
+
+/// LISTEN: the processed sound played out, so DRIVE, MPC3000 OUT and the limiter can be heard while setting them. Koala
+/// still plays its own (dry) sound too, so send Koala to an output you don't listen to and LISTEN to the one you do.
+/// Buffers queue on a player; more than a few behind and the newest are dropped, so it never drifts late.
+final class WebcamMonitor {
+    private let engine = AVAudioEngine(), player = AVAudioPlayerNode()
+    private let lock = NSLock()
+    private var format: AVAudioFormat?, pending = 0, running = false
+    private var device: AudioDeviceID?
+
+    init(deviceUID: String?) {
+        engine.attach(player)
+        device = deviceUID.flatMap(WebcamAudioOutputs.id)
+    }
+    func play(_ sample: CMSampleBuffer) {
+        guard let description = CMSampleBufferGetFormatDescription(sample),
+              case let format = AVAudioFormat(cmAudioFormatDescription: description), format.commonFormat == .pcmFormatFloat32 else { return }
+        let frames = AVAudioFrameCount(CMSampleBufferGetNumSamples(sample))
+        guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { return }
+        buffer.frameLength = frames
+        guard CMSampleBufferCopyPCMDataIntoAudioBufferList(sample, at: 0, frameCount: Int32(frames), into: buffer.mutableAudioBufferList) == noErr else { return }
+        lock.lock(); defer { lock.unlock() }
+        if !running || self.format != format {
+            if running { player.stop(); engine.stop() }
+            engine.connect(player, to: engine.mainMixerNode, format: format)
+            if var id = device, let unit = engine.outputNode.audioUnit {
+                AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &id, UInt32(MemoryLayout<AudioDeviceID>.size))
+            }
+            do { try engine.start() } catch { return }
+            player.play(); running = true; self.format = format; pending = 0
+        }
+        guard pending < 6 else { return }
+        pending += 1
+        player.scheduleBuffer(buffer) { [weak self] in self?.lock.lock(); self?.pending -= 1; self?.lock.unlock() }
+    }
+    func stop() {
+        lock.lock(); defer { lock.unlock() }
+        if running { player.stop(); engine.stop(); running = false }
+    }
+}
+
+/// The Mac's sound outputs, by unique ID and name.
+enum WebcamAudioOutputs {
+    private static func property<T>(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal, _ value: inout T) -> Bool {
+        var address = AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
+        var size = UInt32(MemoryLayout<T>.size)
+        return AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value) == noErr
+    }
+    static func all() -> [(uid: String, name: String)] {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr else { return [] }
+        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids) == noErr else { return [] }
+        return ids.compactMap { id in
+            var streams = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams, mScope: kAudioObjectPropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
+            var streamSize: UInt32 = 0
+            guard AudioObjectGetPropertyDataSize(id, &streams, 0, nil, &streamSize) == noErr, streamSize > 0 else { return nil }
+            var uid: CFString = "" as CFString, name: CFString = "" as CFString
+            guard property(id, kAudioDevicePropertyDeviceUID, &uid), property(id, kAudioObjectPropertyName, &name) else { return nil }
+            return (uid as String, name as String)
+        }
+    }
+    static func id(_ uid: String) -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr else { return nil }
+        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids) == noErr else { return nil }
+        return ids.first { var u: CFString = "" as CFString; return property($0, kAudioDevicePropertyDeviceUID, &u) && (u as String) == uid }
+    }
+}

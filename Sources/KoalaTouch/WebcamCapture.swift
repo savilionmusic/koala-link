@@ -29,6 +29,8 @@ struct WebcamSettings: Codable, Equatable {
     var drive: Double?, mpcOut: Bool?, limiter: Bool?
     /// The limiter's threshold in dB (0 to −20; the ceiling is always −1 dBFS).
     var threshold: Double?
+    /// LISTEN: play the processed sound out of `listenDevice` (an output's unique ID; nil = the Mac's default).
+    var listen: Bool?, listenDevice: String?
     /// Where recordings go (a path); nil = ~/Movies/Koala Link.
     var folder: String?
     var folderURL: URL {
@@ -413,6 +415,13 @@ final class WebcamStudio {
     private var timer: DispatchSourceTimer?
     private let renderer = FrameRenderer(), fx = WebcamFX(), painter = WebcamOverlayPainter(), level = WebcamLevel()
     private let sound = WebcamSoundChain()
+    private let monitorLock = NSLock()
+    private var monitor: WebcamMonitor?
+    private func restartMonitor() {
+        let next = settings.listen == true && timer != nil ? WebcamMonitor(deviceUID: settings.listenDevice) : nil
+        monitorLock.lock(); let old = monitor; monitor = next; monitorLock.unlock()
+        old?.stop()
+    }
     /// The VU, peak and limiting of the processed sound.
     var meter: WebcamSoundChain.Meter { sound.reading }
 
@@ -424,11 +433,13 @@ final class WebcamStudio {
 
     /// `save` false while a layout box is being dragged (saved when it is let go).
     func update(save: Bool = true, _ change: (inout WebcamSettings) -> Void) {
+        let old = settings
         var next = settings; change(&next)
         guard next != settings else { if save { next.save() }; return }
         let reopen = next.camera != settings.camera || next.audio != settings.audio || next.tutorial != settings.tutorial
         queue.sync { settings = next }
         configureSound()
+        if next.listen != old.listen || next.listenDevice != old.listenDevice { restartMonitor() }
         if save { next.save() }
         if reopen { closeSources(); openSources() }
     }
@@ -440,10 +451,12 @@ final class WebcamStudio {
         t.schedule(deadline: .now(), repeating: .milliseconds(33), leeway: .milliseconds(2))
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume(); timer = t
+        restartMonitor()
     }
     func stop() {
         stopRecording { _ in }
         timer?.cancel(); timer = nil
+        restartMonitor()
         closeSources()
     }
 
@@ -465,6 +478,8 @@ final class WebcamStudio {
             self.level.add(processed)
             self.writerLock.lock(); let writer = self.writer; self.writerLock.unlock()
             writer?.appendAudio(processed)
+            self.monitorLock.lock(); let monitor = self.monitor; self.monitorLock.unlock()
+            monitor?.play(processed)
         }
         if s.audio == "koala" || s.tutorial {
             let capture = KoalaScreenCapture()
