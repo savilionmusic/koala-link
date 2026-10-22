@@ -1,16 +1,14 @@
 # Koala Link
 
 Use Koala Sampler with an Akai MPC Touch or Ableton Push 2. Koala Link is free
-to download and use. The current release is **v1.4.6** (app version **1.4.6**,
-build **18**). One installer supports MPC Touch and optional Push 2 preview
-support. Version 1.4.5 was confirmed working on the publisher's MPC Touch setup
-on 2026-10-20. Push 2 remains a preview: its screen artwork has been rendered
-and reviewed offline, but physical Push hardware validation is still pending.
+to download and use. The current release is **v1.4.7** (app version **1.4.7**,
+build **19**). MPC Touch is supported; Push 2 remains a preview and is not
+validated as a supported controller.
 
-**[Download Koala Link v1.4.6](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.6)** · [Push 2 controls](docs/PUSH2-CONTROLS.md) · [Push 2 validation notes](docs/PUSH2-RESEARCH.md)
+**[Download Koala Link v1.4.7](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.7)** · [Manual (PDF)](https://github.com/savilionmusic/koala-link/releases/download/v1.4.7/Koala-Link-1.4.7-Manual.pdf) · [Push 2 controls](docs/PUSH2-CONTROLS.md) · [Push 2 validation notes](docs/PUSH2-RESEARCH.md)
 
-The earlier **v1.4.5-preview.1** and **v1.4.5** releases are historical; the
-current public release is **v1.4.6**.
+The earlier **v1.4.6**, **v1.4.5-preview.1** and **v1.4.5** releases are
+historical; the current public release is **v1.4.7**.
 
 ![Koala Link controller choice](docs/screens/Koala-Link-Controller-Choice.png)
 
@@ -21,13 +19,24 @@ current public release is **v1.4.6**.
 - An Apple silicon Mac running macOS 13 or later, and Koala Sampler for Mac
   (required separately).
 - For MPC Touch, DisplayLink Manager is also required separately; the installer
-  includes the MPC Touch driver. For optional Push 2 preview support, connect
+  includes the MPC Touch driver. For the Push 2 preview, connect
   the controller by USB. Close Ableton Live while Koala Link uses the Push
   display, and quit Paper Cut if it is using the Push.
+- Webcam recording needs a camera and Camera plus Screen & System Audio
+  Recording permission. macOS may ask for Open Anyway because the app is not
+  notarized.
+
+## Webcam recording in v1.4.7
+
+Record yourself playing with Koala's sound, the pad you hit and its waveform
+on screen. Choose 16:9 or 9:16 for Reels, TikTok and Shorts. The MP4 files
+export at 1080×1920 in H.264 and AAC, ready to upload. See the
+[Koala Link manual (PDF)](https://github.com/savilionmusic/koala-link/releases/download/v1.4.7/Koala-Link-1.4.7-Manual.pdf)
+for setup and recording details.
 
 ## Install
 
-1. Download **Koala-Link-Installer.pkg** from Releases and run it.
+1. Download **Koala-Link-1.4.7-Installer.pkg** from Releases and run it.
 2. Open Koala Link from Applications and choose your controller. Connect and
    power the Push 2 before choosing it; connect the MPC Touch before choosing it.
 3. On a new Koala installation, Koala Link opens Koala once to create its settings.
@@ -102,7 +111,7 @@ Preview the Push screens offline (no controller or MIDI endpoints are opened):
 
 ## Build
 
-The **v1.4.6** release is app version **1.4.6, build 18**. It includes
+The **v1.4.6** release (previous version, app build 18) included
 cached fast waveform display and sample-pad selection, local trim feedback,
 and local sequence and piano-roll previews. Timing and sequence previews use
 Koala clock when available and reconcile with saved files; native autosave can
@@ -126,9 +135,9 @@ macro edits share this path. Fresh saved values reconcile the display afterward;
 older reads cannot pull back a more recent edit. START's effect on the other
 boundary is learned from conclusive saved results for each Koala version.
 The original **1.4.0-preview.1** (app 1.4.0, build 8) was the first Push
-preview. The **v1.4.5-preview.1** and **v1.4.5** releases are historical; the
-download link above points to **v1.4.6**. Push physical validation remains
-pending.
+preview. The **v1.4.5-preview.1**, **v1.4.5**, and **v1.4.6** releases are
+historical; the download link above points to **v1.4.7**. Push physical
+validation remains pending.
 
 Install Xcode Command Line Tools, then run:
 
@@ -156,8 +165,8 @@ service is shared with Paper Cut, and is retained when Paper Cut is installed.
 
 ## Credits
 
-Created by Savilion. Alicja Hand handwriting font by Alicja Gajewski, included
-with redistribution permission confirmed by the publisher. See [NOTICE.md](NOTICE.md).
+Created by Savilion. Alicja Hand font credit: copyright 2026 Alicja Gajewski,
+included with the publisher's redistribution permission. See [NOTICE.md](NOTICE.md).
 
 Koala Link is an independent companion app for Koala Sampler and supported controllers.
 
