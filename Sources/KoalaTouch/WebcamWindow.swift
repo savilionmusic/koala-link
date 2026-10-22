@@ -2,11 +2,12 @@ import AppKit
 import AVFoundation
 
 /// WEBCAM: the live picture beside its setup (camera, sound, shape, Koala's screen, overlay, effects), RECORD, a hold
-/// STUTTER, and a clean OUTPUT window to capture in OBS. Opened from the start screen or the Koala Link menu.
+/// STUTTER, a clean OUTPUT window to capture in OBS, and a small FLOATING PREVIEW that stays on top of Koala while you
+/// make the beat (it keeps the webcam running with this window closed). Opened from the start screen or the menu.
 final class WebcamWindowController: NSWindowController, NSWindowDelegate {
     private let studio = WebcamStudio()
     private let preview = WebcamPictureView(frame: NSRect(x: 20, y: 20, width: 800, height: 560))
-    private var output: NSWindow?
+    private var output: NSWindow?, floating: NSPanel?
     private let cameraPopup = NSPopUpButton(), soundPopup = NSPopUpButton()
     private let shape = NSSegmentedControl(labels: ["16:9", "9:16"], trackingMode: .selectOne, target: nil, action: nil)
     private var checks: [NSButton] = []
@@ -48,7 +49,8 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         stutter.onHold = { KoalaPerformanceFeed.shared.setManualStutter($0) }
         record.target = self; record.action = #selector(toggleRecording)
         let pop = NSButton(title: "OUTPUT WINDOW (FOR OBS)", target: self, action: #selector(toggleOutput))
-        for button in [stutter, record, pop] { button.bezelStyle = .rounded; button.font = KoalaLook.font(16); place(button, height: 32, gap: 6) }
+        let mini = NSButton(title: "FLOATING PREVIEW", target: self, action: #selector(toggleFloating))
+        for button in [stutter, record, mini, pop] { button.bezelStyle = .rounded; button.font = KoalaLook.font(16); place(button, height: 32, gap: 6) }
         note.font = NSFont.systemFont(ofSize: 12); note.textColor = KoalaLook.muted
         note.frame = NSRect(x: x, y: 20, width: width, height: max(40, y - 24)); content.addSubview(note)
         shape.target = self; shape.action = #selector(changed)
@@ -58,6 +60,7 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         studio.onPicture = { [weak self] sample in
             self?.preview.show(sample)
             (self?.output?.contentView as? WebcamPictureView)?.show(sample)
+            (self?.floating?.contentView as? WebcamPictureView)?.show(sample)
         }
         studio.onProblem = { [weak self] text in self?.problem = text; self?.refreshNote() }
         window.center()
@@ -71,10 +74,25 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         refreshNote()
     }
+    /// Just the floating preview (the menu's Webcam Preview).
+    func openFloating() {
+        fillControls()
+        studio.start()
+        if floating == nil { toggleFloating() }
+    }
+    /// The webcam stops once both this window and the floating preview are closed.
     func windowWillClose(_ notification: Notification) {
+        if notification.object as? NSWindow === floating {
+            floating = nil
+            if window?.isVisible != true { shutDown() }
+            return
+        }
+        output?.close(); output = nil
+        if floating == nil { shutDown() }
+    }
+    private func shutDown() {
         clock?.invalidate(); clock = nil; recordStarted = nil
         record.title = "● RECORD"
-        output?.close(); output = nil
         KoalaPerformanceFeed.shared.setManualStutter(false)
         studio.stop()
     }
@@ -146,10 +164,32 @@ final class WebcamWindowController: NSWindowController, NSWindowDelegate {
         w.contentView = WebcamPictureView(frame: NSRect(x: 0, y: 0, width: 960, height: 540))
         output = w; sizeOutput(); w.center(); w.makeKeyAndOrderFront(nil)
     }
+    /// A small window over everything (Koala included, on every Space), which doesn't take the keyboard from Koala.
+    @objc private func toggleFloating() {
+        if let floating { floating.close(); return }
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 400, height: 225),
+                            styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.title = "Webcam"; panel.isFloatingPanel = true; panel.level = .floating; panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isReleasedWhenClosed = false; panel.delegate = self
+        panel.contentView = WebcamPictureView(frame: NSRect(x: 0, y: 0, width: 400, height: 225))
+        floating = panel; sizeOutput()
+        if let screen = NSScreen.main {
+            let f = screen.visibleFrame
+            panel.setFrameTopLeftPoint(NSPoint(x: f.maxX - panel.frame.width - 20, y: f.maxY - 20))
+        }
+        panel.orderFrontRegardless()
+    }
     private func sizeOutput() {
-        guard let output else { return }
-        let size = studio.settings.vertical ? NSSize(width: 405, height: 720) : NSSize(width: 960, height: 540)
-        output.contentAspectRatio = size; output.setContentSize(size)
+        let vertical = studio.settings.vertical
+        if let output {
+            let size = vertical ? NSSize(width: 405, height: 720) : NSSize(width: 960, height: 540)
+            output.contentAspectRatio = size; output.setContentSize(size)
+        }
+        if let floating {
+            let size = vertical ? NSSize(width: 225, height: 400) : NSSize(width: 400, height: 225)
+            floating.contentAspectRatio = size; floating.setContentSize(size)
+        }
     }
 
     private func refreshNote() {

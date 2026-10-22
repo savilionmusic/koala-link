@@ -390,8 +390,8 @@ final class WebcamStudio {
     }
 
     func start() {
-        openSources()
         guard timer == nil else { return }
+        openSources()
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now(), repeating: .milliseconds(33), leeway: .milliseconds(2))
         t.setEventHandler { [weak self] in self?.tick() }

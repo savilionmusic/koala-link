@@ -82,6 +82,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         appMenu.addItem(item("Open Koala Again", #selector(openAgain), "o"))
         appMenu.addItem(item("Choose Controller…", #selector(chooseController), ""))
         appMenu.addItem(item("Webcam…", #selector(openWebcam), "w"))
+        appMenu.addItem(item("Webcam Preview", #selector(openWebcamPreview), ""))
         appMenu.addItem(.separator())
         appMenu.addItem(item("Quit Koala Link", #selector(quit), "q"))
         appItem.submenu = appMenu; main.addItem(appItem); NSApp.mainMenu = main
@@ -91,6 +92,7 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         menu.addItem(item("Open Koala Again", #selector(openAgain), "o"))
         menu.addItem(item("Choose Controller…", #selector(chooseController), ""))
         menu.addItem(item("Webcam…", #selector(openWebcam), ""))
+        menu.addItem(item("Webcam Preview", #selector(openWebcamPreview), ""))
         menu.addItem(.separator())
         menu.addItem(item("Quit Koala Link", #selector(quit), "q"))
         status.menu = menu; statusItem = status
@@ -116,6 +118,10 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
     @objc private func openWebcam() {
         if webcam == nil { webcam = WebcamWindowController() }
         webcam?.open()
+    }
+    @objc private func openWebcamPreview() {
+        if webcam == nil { webcam = WebcamWindowController() }
+        webcam?.openFloating()
     }
     private func selectController(_ selected: KoalaControllerChoice) {
         sessionGeneration += 1; retry?.invalidate(); retry = nil
