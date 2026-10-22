@@ -63,7 +63,7 @@ to chop 1; with 26, bank B pad 10 is chop 26 and pad 11 returns to chop 1.
 
 | Control | Hardware input | Translated output / behavior |
 | --- | --- | --- |
-| Pad banks A–D | Ch1 notes 35–38 | Select software bank; no musical note |
+| Pad banks A–D | Ch1 notes 35–38 | Select software bank; no musical note. With SHIFT (Ch1 note 49) held: Ch14 notes 27–30, solo Koala buses 1–4; the bank stays |
 | FULL LEVEL | Public Ch1 note 39 | Toggle pad strike velocity 127 / measured velocity; light follows state; no musical note |
 | 16 LEVELS | Public Ch1 note 40 | Ch15 note 40; toggle keyboard and bridge mode once |
 | Q-Link bank selector | Ch1 note 0 | Cycle four Q-Link banks; no musical note |

@@ -46,6 +46,12 @@ struct KoalaControlRouter {
     private var heldButtons = Set<UInt8>()
     private(set) var padBank = 0
     private(set) var qlinkBank = 0
+    private static let shift: UInt8 = 0x31
+    private var soloSelectors = Set<UInt8>()
+    private static func soloKey(_ bus: Int) -> KoalaKey {
+        let address = "/mixer/channels/\(bus + 1)/solo/toggle"
+        return KoalaPushProfile.defaults.first { $0.address == address }!.key
+    }
     /// Each physical Q-Link's last reported position, and each bank-D effect's amount as last sent Koala.
     private var knobRaw: [UInt8: UInt8] = [:], fxAmounts: [Int: Int] = [:]
     private static let fxKnobGain = 4
@@ -124,6 +130,18 @@ struct KoalaControlRouter {
             let wasDown = streams.values.contains { $0.selectors.contains(number) }
             if down { streams[source]?.selectors.insert(number) }
             else { streams[source]?.selectors.remove(number) }
+            // SHIFT + A–D: solo Koala's buses 1–4 (its mixer's tracks), on any page; the bank stays. The press decides
+            // until its release.
+            if (0x23...0x26).contains(number) {
+                let key = Self.soloKey(Int(number - 0x23))
+                if up, !streams.values.contains(where: { $0.selectors.contains(number) }), soloSelectors.remove(number) != nil {
+                    return key.press(false).map { [.midi($0)] } ?? []
+                }
+                if down, !wasDown, routing, heldButtons.contains(Self.shift) {
+                    soloSelectors.insert(number)
+                    return key.press(true).map { [.midi($0)] } ?? []
+                }
+            }
             guard down && !wasDown else { return [] }
             if number == 0 {
                 qlinkBank = (qlinkBank + 1) % 4
@@ -225,6 +243,13 @@ struct KoalaControlRouter {
         // Down to the knob's end: the effect goes off.
         guard feed([0xB0, 0x10, 60]) == [.midi([0xBD, 28, 72])], feed([0xB0, 0x10, 0]) == [.midi([0xBD, 28, 0])],
               feed([0xB0, 0x10, 0]).isEmpty else { return false }
+        // SHIFT + B solos bus 2 and keeps the bank; C alone still picks bank C.
+        let bank = router.padBank, solo2 = Self.soloKey(1)
+        guard feed([0x90, 0x31, 127]) == [.midi(Self.button(0x31, down: true, velocity: 127))],
+              feed([0x90, 0x24, 127]) == [.midi(solo2.press(true)!)],
+              feed([0x80, 0x31, 0]) == [.midi(Self.button(0x31, down: false, velocity: 0))],
+              feed([0x80, 0x24, 0]) == [.midi(solo2.press(false)!)], router.padBank == bank,
+              feed([0x90, 0x25, 127, 0x80, 0x25, 0]) == [.padBank(2)] else { return false }
         // Long/split SysEx must not interpret embedded status bytes as strikes.
         guard feed([0xF0, 0x47] + Array(repeating: 0x25, count: 600) + [0x99, 0x25, 100]).isEmpty,
               feed([0xF7, 0x99, 0x25, 100, 0x24, 90, 0x89, 0x25, 0, 0x24, 0]) == [.midi([0x9F, 68, 100]), .midi([0x9F, 69, 90]), .midi([0x8F, 68, 0]), .midi([0x8F, 69, 0])] else { return false }
