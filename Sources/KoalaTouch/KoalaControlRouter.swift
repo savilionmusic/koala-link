@@ -46,6 +46,7 @@ struct KoalaControlRouter {
     private var heldButtons = Set<UInt8>()
     private(set) var padBank = 0
     private(set) var qlinkBank = 0
+    private static let bankDEffects: [Int?] = ["STUTTER", "TALKBOX", "FILTER", "CUTTER"].map { KoalaPushProfile.fxNames.firstIndex(of: $0) }
     private(set) var chopperMode = false
     private(set) var fullLevel = false
     private var sampleBank = 0
@@ -160,6 +161,10 @@ struct KoalaControlRouter {
         if channel == 0, kind == 0xB0, (0x10...0x13).contains(number) {
             let knob = number - 0x10
             let assignment = heldLinks[knob].map { $0 - 84 } ?? UInt8(qlinkBank * 4) + knob
+            // Q-Link bank D drives Perform effects: STUTTER, TALKBOX, FILTER, CUTTER (Koala's effect CCs on Ch14).
+            if assignment >= 12, let fx = Self.bankDEffects[Int(assignment) - 12] {
+                return [.midi([0xBD, UInt8(KoalaPushProfile.fxCCBase + fx), value])]
+            }
             return [.midi([0xBE, assignment + 1, value])]
         }
         if channel == 0, (down || up), (0x54...0x57).contains(number) {
@@ -205,7 +210,7 @@ struct KoalaControlRouter {
               feed([0x90, 0, 127, 0x80, 0, 0]) == [.qlinkBank(2)] else { return false }
         // Contact captures its knob assignment until lift-off across a bank change.
         guard feed([0x90, 0x54, 127, 0x90, 0, 127, 0x80, 0, 0]) == [.midi([0x9E, 92, 127]), .qlinkBank(3)],
-              feed([0xB0, 0x10, 42, 0x80, 0x54, 0, 0xB0, 0x10, 70]) == [.midi([0xBE, 9, 42]), .midi([0x8E, 92, 0]), .midi([0xBE, 13, 70])] else { return false }
+              feed([0xB0, 0x10, 42, 0x80, 0x54, 0, 0xB0, 0x10, 70]) == [.midi([0xBE, 9, 42]), .midi([0x8E, 92, 0]), .midi([0xBD, 28, 70])] else { return false }
         // Long/split SysEx must not interpret embedded status bytes as strikes.
         guard feed([0xF0, 0x47] + Array(repeating: 0x25, count: 600) + [0x99, 0x25, 100]).isEmpty,
               feed([0xF7, 0x99, 0x25, 100, 0x24, 90, 0x89, 0x25, 0, 0x24, 0]) == [.midi([0x9F, 68, 100]), .midi([0x9F, 69, 90]), .midi([0x8F, 68, 0]), .midi([0x8F, 69, 0])] else { return false }
