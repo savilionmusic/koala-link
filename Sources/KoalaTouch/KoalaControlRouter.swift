@@ -47,11 +47,19 @@ struct KoalaControlRouter {
     private(set) var padBank = 0
     private(set) var qlinkBank = 0
     private static let shift: UInt8 = 0x31
-    /// A bank button's last tap, for a double tap (seconds).
-    private var lastBankTap: (number: UInt8, at: Double)?
-    private static let doubleTapWindow = 0.35
-    var clock: () -> Double = { ProcessInfo.processInfo.systemUptime }
     private var soloSelectors = Set<UInt8>()
+    /// Bank buttons pressed and not yet held long enough to solo, those soloed by holding, and presses the bridge
+    /// should time (`takeNewHolds`).
+    private var pendingHolds = Set<UInt8>(), holdSolos = Set<UInt8>(), newHolds: [UInt8] = []
+    static let holdToSolo = 0.3
+    private static func tap(_ key: KoalaKey) -> [Event] { [key.press(true), key.press(false)].compactMap { $0.map(Event.midi) } }
+    mutating func takeNewHolds() -> [UInt8] { defer { newHolds.removeAll() }; return newHolds }
+    /// `holdToSolo` after a bank button's press: still held, so its bus solos until the release.
+    mutating func holdElapsed(_ number: UInt8) -> [Event] {
+        guard pendingHolds.remove(number) != nil, streams.values.contains(where: { $0.selectors.contains(number) }) else { return [] }
+        holdSolos.insert(number)
+        return Self.tap(Self.soloKey(Int(number - 0x23)))
+    }
     private static func soloKey(_ bus: Int) -> KoalaKey {
         let address = "/mixer/channels/\(bus + 1)/solo/toggle"
         return KoalaPushProfile.defaults.first { $0.address == address }!.key
@@ -90,8 +98,12 @@ struct KoalaControlRouter {
         var events = pads.releaseAll().map { Event.midi([0x8F, $0, 0]) }
         events += heldLinks.values.map { Event.midi([0x8E, $0, 0]) }
         events += heldButtons.map { Event.midi([0x8E, $0, 0]) }
+        // A solo held on a bank button lets go with it.
+        events += holdSolos.flatMap { Self.tap(Self.soloKey(Int($0 - 0x23))) }
+        events += soloSelectors.compactMap { Self.soloKey(Int($0 - 0x23)).press(false).map(Event.midi) }
         heldLinks.removeAll()
         heldButtons.removeAll()
+        holdSolos.removeAll(); soloSelectors.removeAll(); pendingHolds.removeAll()
         return events
     }
 
@@ -134,19 +146,20 @@ struct KoalaControlRouter {
             let wasDown = streams.values.contains { $0.selectors.contains(number) }
             if down { streams[source]?.selectors.insert(number) }
             else { streams[source]?.selectors.remove(number) }
-            // A–D tapped twice quickly (one hand), or with SHIFT held: solo Koala's buses 1–4 (its mixer's tracks), on any
-            // page; the bank stays (the first tap already picked it). The press decides until its release.
+            // A–D held (one hand): Koala's bus 1–4 (its mixer's track) is soloed until the button is let go; a tap
+            // still just picks the bank. With SHIFT held, a press toggles the solo and leaves it. On any page.
             if (0x23...0x26).contains(number) {
                 let key = Self.soloKey(Int(number - 0x23))
-                if up, !streams.values.contains(where: { $0.selectors.contains(number) }), soloSelectors.remove(number) != nil {
-                    return key.press(false).map { [.midi($0)] } ?? []
+                if up, !streams.values.contains(where: { $0.selectors.contains(number) }) {
+                    pendingHolds.remove(number)
+                    if holdSolos.remove(number) != nil { return Self.tap(key) }
+                    if soloSelectors.remove(number) != nil { return key.press(false).map { [.midi($0)] } ?? [] }
                 }
-                let time = clock(), doubleTap = lastBankTap.map { $0.number == number && time - $0.at < Self.doubleTapWindow } ?? false
-                if down, !wasDown { lastBankTap = doubleTap ? nil : (number, time) }
-                if down, !wasDown, routing, doubleTap || heldButtons.contains(Self.shift) {
+                if down, !wasDown, routing, heldButtons.contains(Self.shift) {
                     soloSelectors.insert(number)
                     return key.press(true).map { [.midi($0)] } ?? []
                 }
+                if down, !wasDown, routing { pendingHolds.insert(number); newHolds.append(number) }
             }
             guard down && !wasDown else { return [] }
             if number == 0 {
@@ -249,18 +262,13 @@ struct KoalaControlRouter {
         // Down to the knob's end: the effect goes off.
         guard feed([0xB0, 0x10, 60]) == [.midi([0xBD, 28, 72])], feed([0xB0, 0x10, 0]) == [.midi([0xBD, 28, 0])],
               feed([0xB0, 0x10, 0]).isEmpty else { return false }
-        // B tapped twice quickly: bank B, then solo bus 2; a slow second tap only picks the bank again.
-        var t = 100.0
-        router.clock = { t }
-        let solo1 = Self.soloKey(1)
-        guard feed([0x90, 0x24, 127, 0x80, 0x24, 0]) == [.padBank(1)] else { return false }
-        t += 0.2
-        guard feed([0x90, 0x24, 127]) == [.midi(solo1.press(true)!)], feed([0x80, 0x24, 0]) == [.midi(solo1.press(false)!)] else { return false }
-        t += 0.2
-        guard feed([0x90, 0x24, 127, 0x80, 0x24, 0]) == [.padBank(1)] else { return false }
-        t += 1
-        guard feed([0x90, 0x24, 127, 0x80, 0x24, 0]) == [.padBank(1)] else { return false }
-        t += 1
+        // B held: bank B at once, bus 2 soloed once the hold is long enough, unsoloed on release; a tap only picks the bank.
+        let solo1 = Self.soloKey(1), toggle1: [Event] = [.midi(solo1.press(true)!), .midi(solo1.press(false)!)]
+        _ = router.takeNewHolds()
+        guard feed([0x90, 0x24, 127]) == [.padBank(1)], router.takeNewHolds() == [0x24], router.holdElapsed(0x24) == toggle1,
+              feed([0x80, 0x24, 0]) == toggle1 else { return false }
+        guard feed([0x90, 0x24, 127, 0x80, 0x24, 0]) == [.padBank(1)], router.holdElapsed(0x24).isEmpty else { return false }
+        _ = router.takeNewHolds()
         // SHIFT + B solos bus 2 and keeps the bank; C alone still picks bank C.
         let bank = router.padBank, solo2 = Self.soloKey(1)
         guard feed([0x90, 0x31, 127]) == [.midi(Self.button(0x31, down: true, velocity: 127))],

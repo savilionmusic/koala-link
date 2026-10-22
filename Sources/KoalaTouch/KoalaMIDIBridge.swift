@@ -143,6 +143,12 @@ final class KoalaMIDIBridge {
                         let events = owner.router.consume(bytes, source: connection.endpoint,
                                                           role: connection.role, routing: owner.routingEnabled)
                         owner.handle(events, origin: connection.role == .publicControl ? "Public MIDI" : "Private MIDI")
+                        for number in owner.router.takeNewHolds() {
+                            owner.queue.asyncAfter(deadline: .now() + KoalaControlRouter.holdToSolo) { [weak owner] in
+                                guard let owner, owner.isStarted else { return }
+                                owner.handle(owner.router.holdElapsed(number))
+                            }
+                        }
                     }
                 }
             }
