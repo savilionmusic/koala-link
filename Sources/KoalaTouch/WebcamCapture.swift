@@ -388,6 +388,8 @@ final class WebcamFX {
     /// it is noticed a picture or two later.
     private var recent: [(time: Double, buffer: CVPixelBuffer)] = []
     private var loopFrom: Double?
+    /// The stutter's last picture before a repeat starts over, faded out of.
+    private var lastStutter: CIImage?
     private let store = FrameRenderer()
     func process(_ image: CIImage, now: Double, state: State, frame: CGRect) -> CIImage {
         var out = image
@@ -401,11 +403,17 @@ final class WebcamFX {
             let period = min(1, state.stutter), from = state.stutterStart
             if loopFrom != from { loopFrom = from; history = recent.filter { $0.time >= from - 0.02 } }
             else if now < from + 1, let copy { history.append((now, copy)) }
-            let target = from + (now - from).truncatingRemainder(dividingBy: period)
+            let phase = (now - from).truncatingRemainder(dividingBy: period), target = from + phase
             if let pick = history.last(where: { $0.time <= target }) ?? history.first {
                 out = CIImage(cvPixelBuffer: pick.buffer).transformed(by: CGAffineTransform(scaleX: 2, y: 2))
+                // Each repeat fades in from where the last one ended (a quarter of the repeat, at most 50 ms), so the
+                // jump back to its start is soft rather than a hard cut.
+                let fade = min(0.05, period / 4)
+                if phase < fade, let last = lastStutter, now - from >= period {
+                    out = last.applyingFilter("CIDissolveTransition", parameters: [kCIInputTargetImageKey: out, kCIInputTimeKey: phase / fade])
+                } else { lastStutter = out }
             }
-        } else if loopFrom != nil { loopFrom = nil; history.removeAll() }
+        } else if loopFrom != nil { loopFrom = nil; history.removeAll(); lastStutter = nil }
         if state.crush > 0 {
             out = out.applyingFilter("CIPixellate", parameters: [kCIInputScaleKey: 6 + 34 * state.crush, kCIInputCenterKey: CIVector(x: 0, y: 0)])
         }
