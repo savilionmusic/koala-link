@@ -280,7 +280,6 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         if controllerChoice == .mpcTouch, let screen = mpcScreen(), let bridge {
             let overlay = KoalaTouchOverlay()
             overlay.onBankSelected = { [weak bridge] bank in bridge?.selectPadBank(bank) }
-            overlay.onPerformPage = { [weak bridge] on in bridge?.setPerformSolo(on) }
             overlay.onKeyboardToggled = { [weak bridge] in bridge?.keyboardToggledOnScreen() }
             overlay.onStatus = { [weak self] text in self?.say(text) }
             bridge.onPadBankChanged = { [weak overlay] bank in overlay?.selectBank(bank) }

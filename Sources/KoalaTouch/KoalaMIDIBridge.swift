@@ -89,9 +89,6 @@ final class KoalaMIDIBridge {
     private var readyHandlers: [() -> Void] = []
     private var routingEnabled = false
 
-    /// Koala's Perform page is showing: the MPC's bank buttons A–D solo Koala's buses instead of switching banks.
-    func setPerformSolo(_ on: Bool) { queue.async { [weak self] in self?.router.performSolo = on } }
-
     func selectPadBank(_ bank: Int) {
         queue.async { [weak self] in
             guard let self, self.isStarted, self.routingEnabled else { return }
