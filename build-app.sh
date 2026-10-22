@@ -10,8 +10,8 @@ set -euo pipefail
 # The bundle is assembled in build/.staging and swapped in at the end.
 HERE="${0:A:h}"
 PROJECT="$HERE"
-VERSION=1.4.6
-BUILD=18
+VERSION=1.4.7
+BUILD=19
 cd "$HERE"
 mkdir -p "$HERE/Sources/KoalaTouch/Resources/Fonts"
 cp "$PROJECT/brand/font/"AlicjaHand-*.otf "$HERE/Sources/KoalaTouch/Resources/Fonts/"
