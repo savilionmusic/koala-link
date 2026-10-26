@@ -74,6 +74,7 @@ body .savi-software-field input,body .savi-software-field select { display:block
 .savi-software-field input::placeholder { color:var(--savi-ink-soft); opacity:1; }
 .savi-software-consent { color:var(--savi-ink)!important; display:flex; align-items:flex-start; gap:12px; font-size:14px; line-height:1.5; padding:4px 0 16px; cursor:pointer; }
 .savi-software-consent input { flex:0 0 20px; width:20px; height:20px; margin:1px 0; accent-color:var(--savi-panel-dark); }
+.savi-software-optional { color:var(--savi-muted); font-size:12px; white-space:nowrap; }
 .savi-software-form-wrap .savi-software-button { width:100%; }
 .savi-software-form-wrap .savi-software-small { margin:16px 0 0; }
 .savi-software-form-wrap .savi-software-small a { text-decoration:underline; text-underline-offset:3px; }

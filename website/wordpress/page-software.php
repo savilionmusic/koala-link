@@ -4,6 +4,10 @@ $downloads = savi_software_downloads();
 $software_assets = content_url('/uploads/software/koala-link/');
 $sav_lab_assets = content_url('/uploads/software/sav-lab/');
 $signup_complete = isset($_GET['signup']) && $_GET['signup'] === 'complete';
+$signup_updates = isset($_GET['updates']) && is_string($_GET['updates']) ? sanitize_key(wp_unslash($_GET['updates'])) : '';
+$signup_joined = $signup_complete && $signup_updates === 'joined';
+$signup_pending = $signup_complete && $signup_updates === 'pending';
+$signup_sync_error = $signup_complete && $signup_updates === 'sync-error';
 // Adapt this page's title and sharing tags while preserving the shared header.
 ob_start();
 get_header();
@@ -24,13 +28,13 @@ echo savi_software_brand_head_markup(ob_get_clean());
                 <p class="savi-software-product-lede">Your controller.<br>Your Koala workflow.</p>
                 <p>Connect Koala Sampler for Mac to MPC Touch or Ableton Push 2. Play samples, work with chops and shape your sound from the hardware. Choose your controller when Koala Link opens.</p>
                 <div class="savi-software-actions">
-                    <a class="savi-software-button is-primary" href="<?php echo esc_url($downloads['stable']); ?>" download>Download for MPC Touch <span aria-hidden="true">↓</span></a>
+                    <a class="savi-software-button is-primary" href="#software-updates">Get the free download <span aria-hidden="true">↓</span></a>
                     <a class="savi-software-text-link" href="<?php echo esc_url($software_assets . 'Koala-Link-1.4.7-Manual.pdf'); ?>" download>Download the manual (PDF) <span aria-hidden="true">↓</span></a>
                     <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link">View source on GitHub <span aria-hidden="true">↗</span></a>
                     <a class="savi-software-text-link" href="#push-preview">Explore Push 2 preview →</a>
                 </div>
                 <p class="savi-software-release"><span>v1.4.7 · build 19 · MPC Touch supported</span> · Apple silicon · macOS 13+</p>
-                <p class="savi-software-small">One installer includes the app, touchscreen driver and automatic MIDI mappings for MPC Touch and Push 2. Requires Koala Sampler (sold separately) and DisplayLink Manager. Email signup is optional.</p>
+                <p class="savi-software-small">One installer includes the app, touchscreen driver and automatic MIDI mappings for MPC Touch and Push 2. Requires Koala Sampler (sold separately) and DisplayLink Manager. Enter an email to unlock the installer; software-update emails are optional.</p>
             </div>
             <figure class="savi-software-app-figure">
                 <div class="savi-software-display-label"><span>KOALA LINK / CONTROLLER SELECT</span><span>VERSION 1.4.7</span></div>
@@ -44,7 +48,7 @@ echo savi_software_brand_head_markup(ob_get_clean());
             <div><span>TOUCH</span><h3>Koala on the MPC screen.</h3><p>Hold, drag pads to the trash, and pinch to zoom in the sample editor and piano roll. Q-Links and transport controls are mapped.</p></div>
         </div>
         <section class="savi-software-whats-new" aria-labelledby="savi-software-whats-new-title">
-            <header class="savi-software-whats-new-heading"><div><p class="savi-software-eyebrow">KOALA LINK / RELEASE 1.4.7</p><h2 id="savi-software-whats-new-title">Film it. Shape it. Perform it.</h2></div></header>
+            <div class="savi-software-whats-new-heading"><div><p class="savi-software-eyebrow">KOALA LINK / RELEASE 1.4.7</p><h2 id="savi-software-whats-new-title">Film it. Shape it. Perform it.</h2></div></div>
             <div class="savi-software-whats-new-grid">
                 <article><p class="savi-software-eyebrow">WEBCAM</p><h3>Film your beats.</h3><p>Record yourself playing with Koala’s sound, the pad you hit and its waveform on screen. Choose 16:9 or 9:16; MP4 videos export at 1080×1920 in H.264 and AAC, ready to upload.</p></article>
                 <article><p class="savi-software-eyebrow">STUTTER / CUTTER</p><h3>Video effects follow the music.</h3><p>STUTTER repeats the picture in time with the beat, from quarter notes to 32nds, with a smooth fade on each repeat. CUTTER chops the picture to black in time.</p></article>
@@ -58,25 +62,32 @@ echo savi_software_brand_head_markup(ob_get_clean());
     <section class="savi-software-updates" id="software-updates" aria-labelledby="updates-title">
         <div class="savi-software-updates-copy">
             <p class="savi-software-eyebrow">SOFTWARE / RELEASE LIST</p>
-            <h2 id="updates-title">Hear what’s next.</h2>
-            <p>Get Koala Link updates and news about new SAV LAB software, including Paper Cut. Join the list for future releases and product launches.</p>
-            <p class="savi-software-small">Joining is optional. Koala Link stays free.</p>
+            <h2 id="updates-title">Get the free download.</h2>
+            <p>Enter your email to reveal the Koala Link installer. The installer is free; joining the software updates list is a separate choice.</p>
+            <p class="savi-software-small">Marketing emails are optional. Unchecked means your email is not added to the updates list.</p>
         </div>
         <div class="savi-software-form-wrap">
-            <form id="savi-software-signup" action="<?php echo esc_url(home_url('/software/')); ?>" method="post" <?php echo $signup_complete ? 'hidden' : ''; ?>>
+            <form id="savi-software-signup" action="<?php echo esc_url(home_url('/software/')); ?>" method="post" <?php echo $signup_complete && !$signup_sync_error ? 'hidden' : ''; ?>>
                 <input type="hidden" name="action" value="savi_software_signup">
                 <?php wp_nonce_field('savi_software_signup', '_wpnonce', false); ?>
                 <input type="hidden" name="ticket" value="<?php echo esc_attr(savi_software_ticket()); ?>">
                 <div class="savi-software-field"><label for="savi-software-email">Email address <span>(required)</span></label><input id="savi-software-email" type="email" name="email" maxlength="254" required autocomplete="email" spellcheck="false" placeholder="you@example.com" aria-describedby="savi-software-privacy savi-software-form-status"></div>
                 <div class="savi-software-field"><label for="savi-software-interest">Your controller</label><select id="savi-software-interest" name="interest"><option value="both">MPC Touch + Push 2 / Exploring</option><option value="mpc-touch">MPC Touch</option><option value="push-2">Push 2</option></select></div>
                 <div class="savi-software-trap" aria-hidden="true"><label for="savi-company-website">Leave this field empty</label><input id="savi-company-website" type="text" name="company_website" tabindex="-1" autocomplete="off"></div>
-                <label class="savi-software-consent" for="savi-software-consent"><input id="savi-software-consent" type="checkbox" name="consent" value="yes" required><span><?php echo esc_html(SAVI_SOFTWARE_CONSENT); ?></span></label>
-                <button class="savi-software-button is-primary" type="submit">Join software updates <span aria-hidden="true">→</span></button>
+                <label class="savi-software-consent" for="savi-software-consent"><input id="savi-software-consent" type="checkbox" name="consent" value="yes"><span><?php echo esc_html(SAVI_SOFTWARE_CONSENT); ?> <span class="savi-software-optional">(optional)</span></span></label>
+                <button class="savi-software-button is-primary" type="submit">Unlock Koala Link <span aria-hidden="true">→</span></button>
                 <p class="savi-software-form-status" id="savi-software-form-status" role="status" tabindex="-1"></p>
-                <p class="savi-software-small" id="savi-software-privacy">Your email and signup preference are stored by Savilion Beats for software updates and product announcements. Unsubscribe from future emails at any time. <a href="<?php echo esc_url(home_url('/privacy-policy/')); ?>">Privacy policy</a>. Need help? <a href="<?php echo esc_url(home_url('/contact/')); ?>">Contact Savilion</a>.</p>
+                <p class="savi-software-small" id="savi-software-privacy">Your email unlocks the installer. If you check the optional box, we send it to MailerLite for software updates. You can unsubscribe from future emails at any time. <a href="<?php echo esc_url(home_url('/privacy-policy/')); ?>">Privacy policy</a>. Need help? <a href="<?php echo esc_url(home_url('/contact/')); ?>">Contact Savilion</a>.</p>
             </form>
             <div id="savi-software-success" class="savi-software-success" role="status" tabindex="-1" <?php echo $signup_complete ? '' : 'hidden'; ?>>
-                <p class="savi-software-eyebrow">SAV LAB / SIGNUP SAVED</p><h3>You’re on the list.</h3><p>Koala Link is ready to download. We’ll use your signup for SAV LAB software updates and future product news.</p>
+                <p class="savi-software-eyebrow"><?php echo $signup_pending ? 'SAV LAB / CONFIRM SOFTWARE UPDATES' : ($signup_joined ? 'SAV LAB / UPDATES JOINED' : 'SAV LAB / DOWNLOAD READY'); ?></p>
+                <h3><?php echo $signup_pending ? 'Check your inbox.' : ($signup_joined ? 'You’re on the updates list.' : 'Koala Link is ready.'); ?></h3>
+                <p><?php
+                    if ($signup_pending) { echo 'Your download is ready now. Follow MailerLite’s confirmation email to receive software updates.'; }
+                    elseif ($signup_joined) { echo 'Your download is ready, and your email is on the software updates list.'; }
+                    elseif ($signup_sync_error) { echo 'Your download is ready, but we could not complete the software updates signup. You can try again using the form.'; }
+                    else { echo 'Your download is ready. Your address has not been added to the updates list.'; }
+                ?></p>
                 <a class="savi-software-button is-primary" href="<?php echo esc_url($downloads['stable']); ?>" download>Download Koala Link 1.4.7 ↓</a>
                 <a class="savi-software-text-link" href="#push-preview">Explore the included Push 2 preview →</a>
                 <p class="savi-software-small">Push 2 support is a preview. The latest build adds faster display feedback and sample deletion; complete control validation is ongoing.</p>
@@ -88,7 +99,7 @@ echo savi_software_brand_head_markup(ob_get_clean());
         <div class="savi-software-section-heading"><p class="savi-software-eyebrow">SAV LAB / KOALA LINK / NEW CONTROLLER</p><span class="savi-software-tag">PREVIEW</span></div>
         <div class="savi-software-push-copy"><h2 id="push-title">A Koala view on Push 2.</h2><p>Play and select samples from the pads, trim with the encoders, and perform with effects and the touch strip. Custom sample, piano-roll, sequence, EQ and mixer views bring Koala to the Push display.</p></div>
         <figure class="savi-software-push-screen"><img src="<?php echo esc_url($software_assets . 'Koala-Link-1.4.5-Push-Sample.png'); ?>" alt="Rendered Push 2 sample screen with a waveform, sample start and end, pitch and volume controls, and a bank indicator." width="960" height="160" loading="lazy"><figcaption>Sample screen artwork rendered from version 1.4.5. New gestures and full control coverage are still being validated on hardware.</figcaption></figure>
-        <div class="savi-software-push-bottom"><p>The Push 2 preview is included in the same <span class="savi-software-number">1.4.7</span> installer. It adds cached waveforms, immediate trim and sequence feedback, and pad selection for editing. To delete a sample, leave NOTE mode, hold one pad and press DELETE; confirm in Koala if prompted. Recording notes use a local timing preview that settles to Koala’s saved data. Mac edits and new audio still depend on Koala saving; create and edit chops in Koala.</p><a class="savi-software-button" href="<?php echo esc_url($downloads['preview']); ?>" download>Download Koala Link 1.4.7 ↓</a></div>
+        <div class="savi-software-push-bottom"><p>The Push 2 preview is included in the same <span class="savi-software-number">1.4.7</span> installer. It adds cached waveforms, immediate trim and sequence feedback, and pad selection for editing. To delete a sample, leave NOTE mode, hold one pad and press DELETE; confirm in Koala if prompted. Recording notes use a local timing preview that settles to Koala’s saved data. Mac edits and new audio still depend on Koala saving; create and edit chops in Koala.</p><a class="savi-software-button" href="#software-updates">Get the free download ↑</a></div>
         <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link/blob/main/docs/PUSH2-CONTROLS.md">Read the Push 2 controls →</a> · <a class="savi-software-text-link" href="https://github.com/savilionmusic/koala-link/releases/tag/v1.4.7">What’s new in 1.4.7 →</a>
     </section>
 

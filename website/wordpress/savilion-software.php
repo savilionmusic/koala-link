@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Savilion Software
  * Description: Software page and consent-based software update signups.
- * Version: 1.0.4
+ * Version: 1.0.5
  */
 if (!defined('ABSPATH')) { exit; }
 
@@ -116,7 +116,7 @@ function savi_software_brand_head_markup($html) {
 
 add_filter('the_content', function ($content) {
     if (!is_page('privacy-policy') || !is_main_query() || !in_the_loop()) { return $content; }
-    return $content . '<section id="software-updates-privacy"><h2>Software update signups</h2><p>Added October 11, 2026. If you choose to join the software updates list, Savilion Beats stores your email address, controller preference, signup source, consent wording and consent date in our WordPress database. We use this information for Koala Link updates and news about future Savilion software, including Paper Cut and product launches.</p><p>Signup is optional and is not required to download Koala Link. You can unsubscribe using the link included in future software emails, or <a href="' . esc_url(home_url('/contact/')) . '">contact Savilion</a>. We retain an unsubscribe status to respect your email preference.</p></section>';
+    return $content . '<section id="software-updates-privacy"><h2>Software download access and updates</h2><p>When you request Koala Link installer access, your email address is processed to provide that access. It is added to the SAV LAB Software updates list only if you select the separate, optional consent checkbox. For opted-in subscribers, we store the email address, controller preference, signup source, consent wording and consent date in our WordPress database. We also send the email address to MailerLite to manage this software updates subscription and deliver updates about Koala Link and future Savilion software, including Paper Cut and product launches. See <a href="https://www.mailerlite.com/legal/privacy-policy" target="_blank" rel="noopener noreferrer">MailerLite’s privacy policy</a>.</p><p>Update emails include an unsubscribe option. You can also <a href="' . esc_url(home_url('/contact/')) . '">contact Savilion</a>. MailerLite manages email delivery preferences; WordPress keeps the original consent record. Download access does not require marketing consent.</p></section>';
 });
 
 add_action('template_redirect', function () {
@@ -145,6 +145,85 @@ function savi_software_downloads() {
     return array('stable' => $installer, 'preview' => $installer);
 }
 
+if (!defined('SAVI_MAILERLITE_GROUP_ID')) {
+    define('SAVI_MAILERLITE_GROUP_ID', '202034791356302567');
+}
+
+function savi_software_mailerlite_sync($email) {
+    if (!defined('SAVI_MAILERLITE_API_KEY') || !is_string(SAVI_MAILERLITE_API_KEY) || trim(SAVI_MAILERLITE_API_KEY) === '') {
+        return array('ok' => false, 'status' => 'sync-error');
+    }
+
+    $response = wp_remote_post('https://connect.mailerlite.com/api/subscribers', array(
+        'headers' => array(
+            'Authorization' => 'Bearer ' . trim(SAVI_MAILERLITE_API_KEY),
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/json',
+            'X-Version' => '2026-10-22',
+        ),
+        'body' => wp_json_encode(array(
+            'email' => $email,
+            'groups' => array(SAVI_MAILERLITE_GROUP_ID),
+        )),
+        'timeout' => 8,
+        'redirection' => 0,
+    ));
+
+    if (is_wp_error($response)) {
+        error_log('SAVI software MailerLite sync failed (network error).');
+        return array('ok' => false, 'status' => 'sync-error');
+    }
+
+    $code = (int) wp_remote_retrieve_response_code($response);
+    $payload = json_decode(wp_remote_retrieve_body($response), true);
+    if (!in_array($code, array(200, 201, 202), true)) {
+        error_log('SAVI software MailerLite sync failed (HTTP ' . $code . ').');
+        return array('ok' => false, 'status' => 'sync-error');
+    }
+
+    $provider_status = isset($payload['data']['status']) && is_string($payload['data']['status'])
+        ? sanitize_key($payload['data']['status'])
+        : '';
+    if (in_array($provider_status, array('unsubscribed', 'bounced', 'junk'), true)) {
+        return array('ok' => true, 'status' => 'not-added');
+    }
+    if ($provider_status === 'unconfirmed' || ($provider_status === '' && $code === 202)) {
+        return array('ok' => true, 'status' => 'pending');
+    }
+    if ($provider_status === 'active') {
+        return array('ok' => true, 'status' => 'joined');
+    }
+
+    error_log('SAVI software MailerLite sync returned an unexpected subscriber status.');
+    return array('ok' => false, 'status' => 'sync-error');
+}
+
+// Keep legacy WordPress unsubscribe links effective after moving delivery to MailerLite.
+function savi_software_mailerlite_unsubscribe($id) {
+    global $wpdb;
+    $table = savi_software_table();
+    $row = $wpdb->get_row($wpdb->prepare("SELECT email, status FROM $table WHERE id = %d", $id));
+    if (!$row || $row->status !== 'unsubscribed') { return true; }
+    $ok = false;
+    if (defined('SAVI_MAILERLITE_API_KEY') && is_string(SAVI_MAILERLITE_API_KEY) && trim(SAVI_MAILERLITE_API_KEY) !== '') {
+        $response = wp_remote_post('https://connect.mailerlite.com/api/subscribers', array(
+            'headers' => array('Authorization' => 'Bearer ' . trim(SAVI_MAILERLITE_API_KEY), 'Accept' => 'application/json', 'Content-Type' => 'application/json'),
+            'body' => wp_json_encode(array('email' => $row->email, 'status' => 'unsubscribed', 'resubscribe' => false)),
+            'timeout' => 8, 'redirection' => 0,
+        ));
+        if (!is_wp_error($response) && in_array((int) wp_remote_retrieve_response_code($response), array(200, 201), true)) {
+            $payload = json_decode(wp_remote_retrieve_body($response), true);
+            $ok = isset($payload['data']['status']) && $payload['data']['status'] === 'unsubscribed';
+        }
+    }
+    if (!$ok && !wp_next_scheduled('savi_software_mailerlite_unsubscribe_retry', array((int) $id))) {
+        wp_schedule_single_event(time() + 5 * MINUTE_IN_SECONDS, 'savi_software_mailerlite_unsubscribe_retry', array((int) $id));
+        error_log('SAVI software MailerLite unsubscribe queued for retry.');
+    }
+    return $ok;
+}
+add_action('savi_software_mailerlite_unsubscribe_retry', 'savi_software_mailerlite_unsubscribe');
+
 function savi_software_ticket() {
     $time = (string) time();
     return $time . '.' . hash_hmac('sha256', $time . '|software-signup', wp_salt('nonce'));
@@ -157,36 +236,56 @@ function savi_software_ticket_valid($ticket) {
     return $age >= 0 && $age <= DAY_IN_SECONDS && hash_equals(hash_hmac('sha256', $parts[0] . '|software-signup', wp_salt('nonce')), $parts[1]);
 }
 
-function savi_software_response($ok, $message, $code = 200) {
+function savi_software_response($ok, $message, $code = 200, $updates_status = null) {
     nocache_headers();
+    if (!in_array($updates_status, array('joined', 'pending', 'not-added', 'sync-error'), true)) {
+        $updates_status = !empty($_POST['consent']) && $_POST['consent'] === 'yes' ? 'pending' : 'not-added';
+    }
+    $subscribed = in_array($updates_status, array('joined', 'pending'), true);
     if (!empty($_POST['ajax'])) {
-        if ($ok) { wp_send_json_success(array('message' => $message, 'downloads' => savi_software_downloads()), $code); }
+        if ($ok) { wp_send_json_success(array('message' => $message, 'downloads' => savi_software_downloads(), 'subscribed' => $subscribed, 'updates' => $updates_status), $code); }
         wp_send_json_error(array('message' => $message), $code);
     }
+    if (savi_software_is_statis_request()) {
+        if ($ok) {
+            wp_redirect('https://statisxsavilion.com/software/?download=ready&updates=' . $updates_status . '#software-access', 303);
+        } else {
+            wp_redirect('https://statisxsavilion.com/software/?signup=error#software-access', 303);
+        }
+        exit;
+    }
     if (!$ok) { wp_die(esc_html($message) . '<p><a href="' . esc_url(home_url('/software/#software-updates')) . '">Return to software downloads</a></p>', 'Software updates', array('response' => $code)); }
-    wp_safe_redirect(home_url('/software/?signup=complete#software-updates'), 303);
+    wp_safe_redirect(home_url('/software/?signup=complete&updates=' . $updates_status . '#software-updates'), 303);
     exit;
+}
+
+function savi_software_is_statis_request() {
+    $origin = isset($_SERVER['HTTP_ORIGIN']) && is_string($_SERVER['HTTP_ORIGIN']) ? strtolower(untrailingslashit($_SERVER['HTTP_ORIGIN'])) : '';
+    $source = isset($_POST['source']) && is_string($_POST['source']) ? sanitize_key(wp_unslash($_POST['source'])) : '';
+    return in_array($origin, array('https://statisxsavilion.com', 'https://www.statisxsavilion.com'), true)
+        && $source === 'statisxsavilion-software';
 }
 
 add_action('admin_post_savi_software_signup', 'savi_software_signup');
 add_action('admin_post_nopriv_savi_software_signup', 'savi_software_signup');
 function savi_software_signup() {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') { savi_software_response(false, 'Please use the signup form.', 405); }
-    $origin = isset($_SERVER['HTTP_ORIGIN']) ? wp_parse_url($_SERVER['HTTP_ORIGIN'], PHP_URL_HOST) : '';
-    if (($origin && $origin !== wp_parse_url(home_url(), PHP_URL_HOST)) || (isset($_SERVER['HTTP_SEC_FETCH_SITE']) && $_SERVER['HTTP_SEC_FETCH_SITE'] === 'cross-site')) {
+    $origin = isset($_SERVER['HTTP_ORIGIN']) && is_string($_SERVER['HTTP_ORIGIN']) ? strtolower(untrailingslashit($_SERVER['HTTP_ORIGIN'])) : '';
+    $statis_request = savi_software_is_statis_request();
+    $site_origin = strtolower(untrailingslashit(home_url()));
+    if (($origin && $origin !== $site_origin && !$statis_request) || (isset($_SERVER['HTTP_SEC_FETCH_SITE']) && $_SERVER['HTTP_SEC_FETCH_SITE'] === 'cross-site' && !$statis_request)) {
         savi_software_response(false, 'Please sign up from the Software page.', 403);
     }
-    $nonce = isset($_POST['_wpnonce']) && is_string($_POST['_wpnonce']) ? sanitize_text_field(wp_unslash($_POST['_wpnonce'])) : '';
-    $ticket = isset($_POST['ticket']) && is_string($_POST['ticket']) ? sanitize_text_field(wp_unslash($_POST['ticket'])) : '';
-    if (!wp_verify_nonce($nonce, 'savi_software_signup') || !savi_software_ticket_valid($ticket)) {
-        savi_software_response(false, 'This form has expired. Refresh the page and try again.', 403);
+    if (!$statis_request) {
+        $nonce = isset($_POST['_wpnonce']) && is_string($_POST['_wpnonce']) ? sanitize_text_field(wp_unslash($_POST['_wpnonce'])) : '';
+        $ticket = isset($_POST['ticket']) && is_string($_POST['ticket']) ? sanitize_text_field(wp_unslash($_POST['ticket'])) : '';
+        if (!wp_verify_nonce($nonce, 'savi_software_signup') || !savi_software_ticket_valid($ticket)) {
+            savi_software_response(false, 'This form has expired. Refresh the page and try again.', 403);
+        }
     }
-    if (!empty($_POST['company_website'])) { savi_software_response(false, 'We could not save that signup. Please use the form again.', 400); }
-    if (empty($_POST['consent']) || $_POST['consent'] !== 'yes') { savi_software_response(false, 'Please check the email updates box to join. You can download Koala Link without signing up.', 400); }
+    if (!empty($_POST['company_website'])) { savi_software_response(false, 'We could not process that request. Please use the form again.', 400); }
     $email = isset($_POST['email']) && is_string($_POST['email']) ? strtolower(trim(wp_unslash($_POST['email']))) : '';
     if (strlen($email) > 254 || !is_email($email)) { savi_software_response(false, 'Enter a valid email address, such as you@example.com.', 400); }
-    $interest = isset($_POST['interest']) && is_string($_POST['interest']) ? sanitize_key($_POST['interest']) : 'both';
-    if (!in_array($interest, array('mpc-touch', 'push-2', 'both'), true)) { $interest = 'both'; }
     // A salted, short-lived IP hash limits abuse without retaining visitors' IP addresses.
     $ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '';
     $rate_key = 'savi_software_rate_' . substr(hash_hmac('sha256', $ip, wp_salt('auth')), 0, 32);
@@ -195,13 +294,19 @@ function savi_software_signup() {
     if ($rate['count'] >= 10) { savi_software_response(false, 'Too many signup attempts. Please try again later. The free download is still available below.', 429); }
     $rate['count']++;
     set_transient($rate_key, $rate, max(1, $rate['until'] - time()));
+    $consent = !empty($_POST['consent']) && $_POST['consent'] === 'yes';
+    if (!$consent) {
+        savi_software_response(true, 'Your Koala Link download is ready.', 200, 'not-added');
+    }
+    $interest = isset($_POST['interest']) && is_string($_POST['interest']) ? sanitize_key($_POST['interest']) : 'both';
+    if (!in_array($interest, array('mpc-touch', 'push-2', 'both'), true)) { $interest = 'both'; }
     global $wpdb;
     $table = savi_software_table();
     $now = current_time('mysql', true);
     $previous = $wpdb->get_row($wpdb->prepare("SELECT id, status FROM $table WHERE email = %s", $email));
     if ($previous && $previous->status === 'unsubscribed') {
         // Re-subscription must come through email verification by the owner/provider.
-        savi_software_response(false, 'This address was previously unsubscribed. Contact Savilion to rejoin; the download is available without signing up.', 409);
+        savi_software_response(true, 'Your download is ready. This address remains unsubscribed and was not re-added.', 200, 'not-added');
     }
     if ($previous) {
         if ($wpdb->update($table, array('interest' => $interest), array('id' => (int) $previous->id), array('%s'), array('%d')) === false) {
@@ -210,7 +315,7 @@ function savi_software_signup() {
     } else {
         $saved = $wpdb->insert($table, array(
             'email' => $email, 'status' => 'subscribed', 'interest' => $interest,
-            'source' => 'software-page', 'consent_text' => SAVI_SOFTWARE_CONSENT,
+            'source' => $statis_request ? 'statisxsavilion-software' : 'savilion-software', 'consent_text' => SAVI_SOFTWARE_CONSENT,
             'consent_version' => SAVI_SOFTWARE_CONSENT_VERSION,
             'created_at' => $now, 'consented_at' => $now,
         ), array('%s','%s','%s','%s','%s','%s','%s','%s'));
@@ -219,7 +324,17 @@ function savi_software_signup() {
             savi_software_response(false, 'We could not save your signup. Your email has not been added. Please try again.', 503);
         }
     }
-    savi_software_response(true, 'You’re on the software updates list. Koala Link is ready to download below.');
+    $mailerlite = savi_software_mailerlite_sync($email);
+    if (!$mailerlite['ok']) {
+        savi_software_response(true, 'Your Koala Link download is ready, but we could not complete the software updates signup. Please try again later.', 200, 'sync-error');
+    }
+    if ($mailerlite['status'] === 'pending') {
+        savi_software_response(true, 'Your download is ready. Check your inbox to confirm software updates.', 200, 'pending');
+    }
+    if ($mailerlite['status'] === 'not-added') {
+        savi_software_response(true, 'Your download is ready. Your address has not been added to the updates list.', 200, 'not-added');
+    }
+    savi_software_response(true, 'Your Koala Link download is ready. You’re on the software updates list.', 200, 'joined');
 }
 
 function savi_software_unsubscribe_url($id) {
@@ -244,14 +359,33 @@ function savi_software_unsubscribe() {
     global $wpdb;
     $result = $wpdb->update(savi_software_table(), array('status' => 'unsubscribed', 'unsubscribed_at' => current_time('mysql', true)), array('id' => $id), array('%s','%s'), array('%d'));
     if ($result === false) { wp_die('We could not save this change. Please try again.', 'Software updates', array('response' => 503)); }
-    wp_die('<p>You have been unsubscribed from Savilion software updates.</p><p><a href="' . esc_url(home_url('/software/')) . '">Back to software</a></p>', 'Unsubscribed', array('response' => 200));
+    $provider_saved = savi_software_mailerlite_unsubscribe($id);
+    $message = $provider_saved ? 'You have been unsubscribed from Savilion software updates.' : 'Your unsubscribe request has been saved and is being processed. You can also use the unsubscribe link in any software update email.';
+    wp_die('<p>' . esc_html($message) . '</p><p><a href="' . esc_url(home_url('/software/')) . '">Back to software</a></p>', 'Unsubscribed', array('response' => 200));
 }
 
 add_action('admin_menu', function () {
     add_menu_page('Software signups', 'Software signups', 'manage_options', 'savi-software-signups', 'savi_software_admin', 'dashicons-email-alt', 58);
 });
+function savi_software_mailerlite_connection() {
+    if (!defined('SAVI_MAILERLITE_API_KEY') || !is_string(SAVI_MAILERLITE_API_KEY) || trim(SAVI_MAILERLITE_API_KEY) === '') { return false; }
+    $cache_key = 'savi_ml_connection_' . substr(hash('sha256', SAVI_MAILERLITE_API_KEY), 0, 12);
+    $cached = get_transient($cache_key);
+    if ($cached !== false) { return $cached === 'connected'; }
+    $response = wp_remote_get('https://connect.mailerlite.com/api/groups/' . rawurlencode(SAVI_MAILERLITE_GROUP_ID), array(
+        'headers' => array('Authorization' => 'Bearer ' . trim(SAVI_MAILERLITE_API_KEY), 'Accept' => 'application/json'),
+        'timeout' => 8, 'redirection' => 0,
+    ));
+    $payload = !is_wp_error($response) ? json_decode(wp_remote_retrieve_body($response), true) : array();
+    $connected = !is_wp_error($response) && (int) wp_remote_retrieve_response_code($response) === 200
+        && isset($payload['data']['id']) && (string) $payload['data']['id'] === SAVI_MAILERLITE_GROUP_ID;
+    set_transient($cache_key, $connected ? 'connected' : 'unavailable', 5 * MINUTE_IN_SECONDS);
+    return $connected;
+}
 function savi_software_admin() {
     if (!current_user_can('manage_options')) { return; }
+    $connection = savi_software_mailerlite_connection() ? 'Connected to SAV LAB Software' : 'Connection unavailable — check the server key or retry shortly';
+    echo '<div class="notice notice-info"><p><strong>MailerLite:</strong> ' . esc_html($connection) . '</p></div>';
     global $wpdb;
     $table = savi_software_table();
     $page = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
@@ -259,7 +393,7 @@ function savi_software_admin() {
     $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
     $rows = $wpdb->get_results($wpdb->prepare("SELECT id, email, status, interest, consented_at FROM $table ORDER BY id DESC LIMIT %d OFFSET %d", 50, ($page - 1) * 50));
     $export = wp_nonce_url(admin_url('admin-post.php?action=savi_software_export'), 'savi_software_export');
-    echo '<div class="wrap"><h1>Software signups</h1><p><strong>' . esc_html(number_format_i18n($count)) . '</strong> subscribed · Koala Link and future Savilion products, including Paper Cut.</p><p><a class="button button-primary" href="' . esc_url($export) . '">Export subscribed emails (CSV)</a> <a class="button" href="' . esc_url(home_url('/software/')) . '">View software page</a></p><p>Only explicitly opted-in addresses are stored here. No emails are sent automatically. The export includes the consent record and each subscriber’s unsubscribe URL. Include that link when sending future updates and exclude unsubscribed addresses.</p><table class="widefat striped"><thead><tr><th>Email</th><th>Interest</th><th>Status</th><th>Consent date (UTC)</th></tr></thead><tbody>';
+    echo '<div class="wrap"><h1>Software signups</h1><p><strong>' . esc_html(number_format_i18n($count)) . '</strong> consent records · Koala Link and future Savilion products, including Paper Cut.</p><p><a class="button button-primary" href="' . esc_url($export) . '">Export consent records (CSV)</a> <a class="button" href="' . esc_url(home_url('/software/')) . '">View software page</a></p><p>Only explicitly opted-in addresses are stored here and synced to the MailerLite SAV LAB Software group. MailerLite sends confirmation emails and manages campaign delivery and unsubscribe preferences. Use MailerLite—not this consent-record export—to send updates. The export is retained for consent record keeping.</p><table class="widefat striped"><thead><tr><th>Email</th><th>Interest</th><th>Status</th><th>Consent date (UTC)</th></tr></thead><tbody>';
     if (!$rows) { echo '<tr><td colspan="4">No signups yet. New software signups will appear here.</td></tr>'; }
     foreach ($rows as $row) {
         echo '<tr><td>' . esc_html($row->email) . '</td><td>' . esc_html($row->interest) . '</td><td>' . esc_html($row->status) . '</td><td style="font-family:monospace;font-variant-numeric:tabular-nums">' . esc_html($row->consented_at) . '</td></tr>';

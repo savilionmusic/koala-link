@@ -8,3 +8,5 @@ dist/*.pkg
 dist/*.zip
 *.swiftmodule
 *.pcm
+dist/manual/
+dist/SHA256SUMS.txt
