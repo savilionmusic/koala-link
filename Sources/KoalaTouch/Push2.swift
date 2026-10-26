@@ -172,6 +172,8 @@ final class Push2Device {
 
     private var client = MIDIClientRef(), inPort = MIDIPortRef(), outPort = MIDIPortRef()
     private var source = MIDIEndpointRef(), destination = MIDIEndpointRef()
+    private let midiIsolation = PushMIDIIsolation()
+    var rawInputIsolated: Bool { midiIsolation.active }
     private var watch: Timer?
     private var padColors = [UInt8?](repeating: nil, count: 64)
     private var buttonValues: [Int: UInt8] = [:]
@@ -197,6 +199,8 @@ final class Push2Device {
 
     func start() {
         guard client == 0 else { return }
+        do { try midiIsolation.recover() }
+        catch { setDisplayState(error.localizedDescription); return }
         setRunning(true)
         let runToken = currentRunGeneration
         MIDIClientCreateWithBlock("Koala Link Push 2" as CFString, &client) { [weak self] _ in
@@ -239,6 +243,8 @@ final class Push2Device {
         }
         displayQueue.sync { push2_display_close() }
         if source != 0 { MIDIPortDisconnectSource(inPort, source) }
+        do { try midiIsolation.restore() }
+        catch { PickerLog.write(error.localizedDescription); onDisplayStateChanged?(error.localizedDescription) }
         if client != 0 { MIDIClientDispose(client) }
         client = 0; inPort = 0; outPort = 0; source = 0; destination = 0
         connected = false; padColors = .init(repeating: nil, count: 64); buttonValues = [:]
@@ -270,6 +276,18 @@ final class Push2Device {
 
     private func refreshEndpoints() {
         guard running, client != 0 else { return }
+        // Private endpoints leave the enumeration, but our existing connection
+        // remains valid. Do not disconnect it in response to our own change.
+        if midiIsolation.active {
+            var offline: Int32 = 0, sourceID: Int32 = 0, destinationID: Int32 = 0
+            let offlineStatus = MIDIObjectGetIntegerProperty(source, kMIDIPropertyOffline, &offline)
+            if source != 0, destination != 0,
+               MIDIObjectGetIntegerProperty(source, kMIDIPropertyUniqueID, &sourceID) == noErr,
+               MIDIObjectGetIntegerProperty(destination, kMIDIPropertyUniqueID, &destinationID) == noErr,
+               (offlineStatus == noErr || offlineStatus == kMIDIUnknownProperty), offline == 0 { return }
+            do { try midiIsolation.restore() }
+            catch { setDisplayState(error.localizedDescription); return }
+        }
         let src = Self.endpoint(named: Self.portName, sources: true), dst = Self.endpoint(named: Self.portName, sources: false)
         if src == source && dst == destination { return }
         bumpGeneration()
@@ -278,7 +296,21 @@ final class Push2Device {
         if source != 0 { MIDIPortDisconnectSource(inPort, source) }
         source = src ?? 0; destination = dst ?? 0
         if source != 0 { MIDIPortConnectSource(inPort, source, nil) }
-        let now = source != 0 && destination != 0
+        var now = source != 0 && destination != 0
+        var isolationError: String?
+        if now, PushMIDIIsolation.enabled {
+            var entity = MIDIEntityRef(), device = MIDIDeviceRef()
+            do {
+                guard MIDIEndpointGetEntity(source, &entity) == noErr,
+                      MIDIEntityGetDevice(entity, &device) == noErr else {
+                    throw NSError(domain: "KoalaLink.PushIsolation", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not find Push's MIDI device."])
+                }
+                try midiIsolation.claim(device)
+            } catch {
+                isolationError = error.localizedDescription
+                MIDIPortDisconnectSource(inPort, source); source = 0; destination = 0; now = false
+            }
+        }
         padColors = .init(repeating: nil, count: 64); buttonValues = [:]
         if now {
             send(Push2Protocol.midiMode(1))
@@ -294,6 +326,7 @@ final class Push2Device {
         }
         connected = now
         onConnectionChanged?(now)
+        if let isolationError { setDisplayState(isolationError) }
     }
 
     /// Reads original palette entries before changing them; slots without replies stay untouched.

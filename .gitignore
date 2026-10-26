@@ -1,5 +1,6 @@
 .build/
 build/
+work/
 .swiftpm-cache/
 .clang-cache/
 .codegraph/

@@ -108,7 +108,7 @@ final class PushKoalaBridge {
         let keyboard = KoalaPushProfile.keyboardSettings()
         controller?.keyboardChannel = keyboard.channel; controller?.keyboardOffset = keyboard.offset
         controller?.padsSelectInKoala = KoalaPushProfile.canSelectPads()
-        controlsReady = KoalaPushProfile.settingsMatch(mode: .push2)
+        controlsReady = KoalaPushProfile.settingsMatch(mode: .push2) && (!PushMIDIIsolation.enabled || device.rawInputIsolated)
         refresh()
     }
 

@@ -1,5 +1,61 @@
 # Push 2 implementation and validation
 
+## Raw MIDI takeover investigation · 2026-10-26
+
+The user confirmed 1.4.8's chooser worked but other sounds took over, with a
+boundary near pad 15. A read-only trace showed raw Push channel-1 notes and
+correct channel-13 translations. With a persistent diagnostic MIDI source,
+raw channel 1 note 74 visibly moved native Koala from Chopper A1 to sample A15;
+the translated channel-13 notes left A1 selected. Unmapped raw notes reach a
+native fallback even when the canonical map has no channel-1 entries. The
+1.4.9 experiment moving sample mappings out of 36–99 did not fix it and was
+removed. An unknown MIDI-map address also did not consume the fallback.
+
+The user approved a bounded 45-second CoreMIDI privacy test. Setting the Push
+device's documented `kMIDIPropertyPrivate` flag kept pre-existing test bridge
+connections receiving input, while a newly launched Koala listed seven inputs
+with no raw Push ports. The script restored visibility successfully afterwards.
+
+Release **1.4.10/build23** implements this session ownership with first-use
+consent. It connects the bridge before isolating the device, then reopens
+Koala so it sees the translated source alone. Rescans retain the existing
+private connections. Quit/controller changes restore the original flag;
+reconnect reopens Koala after isolation. A receipt written before the change
+recovers a prior crash and never claims an already-private device. Offline
+checks exercise restoration, failure receipts, missing devices and recovery.
+The accepted Touch map, routing and driver remain unchanged. The installed
+1.4.10 session logged isolation, User mode, display and Koala ready. A new
+read-only CoreMIDI process listed the translated Koala Link Push source and
+no raw Ableton Push inputs. The user reported **“ITS WORKING”** on the physical
+Push. The release check found build 22's normal-quit lookup could not enumerate
+its private device, even though the recorded unique ID still resolved. Build
+23 restores by `MIDIObjectFindByUniqueID`, verifies the original flag before
+clearing the receipt, and retains recovery if a setter reports success without
+changing the flag. The build-22 device was restored using its recorded ID;
+the final build-23 normal-quit check restored the real device's private flag to
+0, returned both Live and User ports to a new client, and removed the receipt.
+The verified build was reopened successfully afterwards.
+
+## Local Push source-selection fix · 2026-10-26
+
+Version **1.4.8, build 20** changes Push Keyboard entry from immediately playing
+the previously selected sample to an explicit chooser: Keyboard/Note, then a
+loaded source pad, then chops/keys. The existing chooser had become unreachable.
+Source selection sends the canonical sample note on channel 16 exactly once;
+chop/key notes use channel 13. Repeat pauses while choosing and retains each
+held strike's original mode/source, note, pressure and release assignment.
+An empty source pad sends no note, avoiding MIDI-triggered recording.
+
+Saved keyboard and selection state must match the command as well as its
+revision/save timestamp before acknowledging it. A save enabling Keyboard
+cannot bypass the chooser, and stale saves cannot undo an exit or replace a
+newer source choice. Later saved mouse selections still update the source.
+The standalone `--check-push-keyboard` command exercises this without MIDI ports
+or hardware. The accepted MPC profile, pad routing, overlay and signed driver
+are unchanged. This is a local fix; live Push confirmation remains necessary.
+
+## Earlier release validation
+
 Status updated **2026-10-20** for the current **v1.4.6** release (app version
 1.4.6, build 18). One installer supports MPC Touch and optional Push 2 preview
 use. The user confirmed today that version 1.4.5 works fine on MPC Touch.

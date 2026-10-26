@@ -17,7 +17,8 @@ final class KoalaIntegration {
     /// `accessibilityOptional`: without Accessibility, Koala still opens (where macOS puts it, not
     /// fullscreen) instead of failing. For Koala on the Mac's display with the Push.
     func open(on screen: NSScreen, accessibilityOptional: Bool = false, placeWindow: Bool = true,
-              profileMode: KoalaPushProfile.Mode = .mpcTouch, completion: @escaping (Result<NSRunningApplication, Error>) -> Void) {
+              profileMode: KoalaPushProfile.Mode = .mpcTouch, forceRestart: Bool = false,
+              completion: @escaping (Result<NSRunningApplication, Error>) -> Void) {
         let placement = placeWindow && AXIsProcessTrusted()
         guard placement || accessibilityOptional else {
             completion(.failure(KoalaIntegrationError.accessibilityRequired))
@@ -39,7 +40,7 @@ final class KoalaIntegration {
         }
 
         if let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first(where: { !$0.isTerminated }) {
-            if !KoalaPushProfile.settingsMatch(mode: profileMode) {
+            if forceRestart || !KoalaPushProfile.settingsMatch(mode: profileMode) {
                 onStatus?("Saving and reopening Koala for the selected controller's MIDI channels…")
                 guard running.terminate() else {
                     completion(.failure(NSError(domain: "KoalaLink.Profile", code: 1, userInfo: [NSLocalizedDescriptionKey: "Koala could not close normally. Save and quit it, then choose the controller again."])))

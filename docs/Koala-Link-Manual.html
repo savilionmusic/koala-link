@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Koala Link 1.4.10 Manual</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  :root { --ink: #222; --muted: #666; --accent: #A94F39; --cream: #F5EBDD; --line: #ddd; }
+  body { font: 10.5pt/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; color: var(--ink); margin: 0; }
+  h1 { font-size: 26pt; margin: 0 0 4pt; color: var(--accent); letter-spacing: -0.5pt; }
+  h2 { font-size: 15pt; margin: 22pt 0 6pt; padding-bottom: 3pt; border-bottom: 2px solid var(--accent); break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 14pt 0 4pt; break-after: avoid; }
+  p, li { margin: 0 0 5pt; }
+  ul, ol { padding-left: 18pt; margin: 0 0 8pt; }
+  table { width: 100%; border-collapse: collapse; margin: 4pt 0 10pt; font-size: 9.8pt; break-inside: avoid; }
+  th, td { text-align: left; vertical-align: top; padding: 4pt 6pt; border-bottom: 1px solid var(--line); }
+  th { background: var(--cream); }
+  .cover { padding: 30pt 0 10pt; border-bottom: 1px solid var(--line); margin-bottom: 10pt; }
+  .sub { color: var(--muted); font-size: 11pt; }
+  .note { background: var(--cream); border-left: 3px solid var(--accent); padding: 6pt 9pt; margin: 6pt 0 10pt; break-inside: avoid; }
+  code, kbd { font: 9.5pt Menlo, monospace; }
+  kbd { border: 1px solid #bbb; border-radius: 3px; padding: 0 3pt; background: #fafafa; }
+  .small { font-size: 9pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Koala Link 1.4.10</h1>
+  <p class="sub">Play Koala Sampler from an Akai MPC Touch or Ableton Push 2, and film your performances with the built-in Webcam.</p>
+  <p class="small">App version 1.4.10, build 23 · Apple silicon · macOS 13 or later · Free</p>
+</div>
+
+<h2>1. What you need</h2>
+<ul>
+  <li>An Apple silicon Mac running macOS 13 or later.</li>
+  <li><b>Koala Sampler for Mac</b>, bought and installed separately.</li>
+  <li><b>MPC Touch:</b> DisplayLink Manager (installed separately) for the touchscreen. The touchscreen driver is included in the installer.</li>
+  <li><b>Push 2 (preview):</b> connected by USB. Close Ableton Live while Koala Link uses the Push.</li>
+  <li><b>Webcam:</b> a camera, plus macOS permission for Camera and for Screen &amp; System Audio Recording (used to record Koala's sound).</li>
+</ul>
+
+<h2>2. Install</h2>
+<ol>
+  <li>Download <b>Koala-Link-1.4.10-Installer.pkg</b> and open it. Follow the steps and enter your Mac password.</li>
+  <li>The app is not notarized. If macOS blocks it, open System Settings → Privacy &amp; Security and choose <b>Open Anyway</b>.</li>
+  <li>Open <b>Koala Link</b> from Applications and choose your controller. Connect and power the controller first.</li>
+  <li>On a new Koala installation, Koala Link opens Koala once so it can create its settings. Complete any welcome or permission dialogs, then quit Koala when asked. Koala Link then prepares the MIDI mappings and reopens Koala. You do not need to do any MIDI Learn.</li>
+  <li>For MPC Touch, allow <b>Koala Link</b> and <b>mpc_touchd</b> in System Settings → Privacy &amp; Security → Accessibility when asked.</li>
+</ol>
+<div class="note">Upgrading from an earlier version keeps your settings. Your Koala settings and MIDI maps are backed up before any change.</div>
+
+<h2>3. MPC Touch controls</h2>
+<table>
+  <tr><th style="width:30%">Control</th><th>What it does</th></tr>
+  <tr><td>16 pads</td><td>Play Koala's pads. Banks A-D cover pads A1-D16. A held pad keeps its sound until you let go, even if you change bank.</td></tr>
+  <tr><td>Pad bank A-D, tap</td><td>Switch the pad bank.</td></tr>
+  <tr><td><b>Pad bank A-D, hold</b></td><td>solo Koala's mixer track 1-4 while held. Let go to unsolo. Holding also selects that bank.</td></tr>
+  <tr><td><b>SHIFT + pad bank A-D</b></td><td>turn the solo for track 1-4 on or off, and leave it that way.</td></tr>
+  <tr><td>FULL LEVEL</td><td>Every pad hit at full velocity. Press again for natural velocity.</td></tr>
+  <tr><td>16 LEVELS</td><td>Chopper keyboard mode: the 64 pads across banks A-D play chops 1-64.</td></tr>
+  <tr><td>REC / PLAY</td><td>Koala's record and play.</td></tr>
+  <tr><td>Q-Link bank button</td><td>Step through Q-Link banks A, B, C, D.</td></tr>
+  <tr><td>Touchscreen</td><td>Koala runs full screen on the MPC's display. On-screen bank buttons sit beside Koala's pads, and a MIXER button appears on Koala's Perform page.</td></tr>
+</table>
+
+<h3>Q-Links</h3>
+<table>
+  <tr><th style="width:30%">Bank</th><th>Knobs 1-4</th></tr>
+  <tr><td>A</td><td>Start, length, volume and pitch of the selected pad.</td></tr>
+  <tr><td>B and C</td><td>Free for your own MIDI Learn in Koala.</td></tr>
+  <tr><td><b>D</b></td><td><b>Perform effects:</b> 1 STUTTER, 2 TALKBOX, 3 FILTER, 4 CUTTER. About a quarter turn takes an effect from off to full. Turn it all the way down to switch the effect off.</td></tr>
+</table>
+
+<h2>4. Push 2 (preview)</h2>
+<p>Push 2 support is a preview: the pads, buttons, encoders and screen are mapped, but full hardware testing is still going on. The chop-grid fix in this version was confirmed on physical Push hardware. The complete control list is in <b>PUSH2-CONTROLS.md</b> on the project's GitHub page.</p>
+<h3>Choose a sample and play its chops</h3>
+<ol>
+  <li>Create or edit your sample's chops in Koala.</li>
+  <li>Press <b>NOTE</b> or the upper <b>KEYBOARD</b> button on Push. The grid blinks while waiting for a source.</li>
+  <li>Hit the loaded sample pad you want to use. Empty pads leave the chooser waiting.</li>
+  <li>Play its chops across <b>all 64 pads</b>. The chop grid is cyan; held pads turn white. Other loaded samples cannot take over the grid.</li>
+  <li>Press Keyboard again to exit. Re-enter Keyboard to choose a different sample.</li>
+</ol>
+<div class="note"><b>Push session ownership:</b> on first use, approve the prompt to use Push exclusively with Koala Link. Its raw MIDI ports are hidden from other apps while the session runs, preventing duplicate pad input in Koala. Close Ableton Live and other Push apps first. Quitting Koala Link or changing controllers restores the ports. After a crash, reopen Koala Link and choose Push to recover them.</div>
+
+<h2>5. Webcam</h2>
+<p>Webcam films you playing, with Koala's own sound, the pad you hit and its waveform, and video effects that follow Koala's Perform effects. Open it from the start screen or the Koala Link menu (<b>Webcam…</b>).</p>
+
+<h3>Setup</h3>
+<table>
+  <tr><th style="width:30%">Setting</th><th>What it does</th></tr>
+  <tr><td>Camera</td><td>Which camera to use.</td></tr>
+  <tr><td>Sound</td><td>Koala's own sound (recommended) or any audio input.</td></tr>
+  <tr><td>Shape</td><td>16:9 (1920×1080) or 9:16 (1080×1920) for Reels, TikTok and Shorts.</td></tr>
+  <tr><td>Camera in 9:16</td><td>Turn the camera upright, right or left.</td></tr>
+  <tr><td>Koala screen (tutorial)</td><td>Show Koala's window in the video with the camera beside or under it.</td></tr>
+  <tr><td>Pad and waveform overlay</td><td>Show the pad you hit, its waveform and the effects in use.</td></tr>
+  <tr><td>Video effects</td><td>Let STUTTER and CUTTER change the picture.</td></tr>
+  <tr><td>Mirror camera</td><td>Flip the camera like a mirror.</td></tr>
+  <tr><td>Move things on the picture</td><td>Drag Koala's screen and the overlay card where you want them. RESET LAYOUT puts them back.</td></tr>
+  <tr><td>Choose folder…</td><td>Where recordings are saved. Until you choose, they go to Movies/Koala Link.</td></tr>
+</table>
+
+<h3>Video effects</h3>
+<ul>
+  <li><b>STUTTER</b> repeats the picture in time with Koala's tempo. A small turn of Q-Link D1 repeats every quarter note, and turning further goes to 8ths, 16ths and 32nds. Each repeat fades in smoothly. Turn it all the way down and the video plays normally again.</li>
+  <li><b>CUTTER</b> cuts the picture to black in slices at the same kind of rate, set by Q-Link D4.</li>
+  <li><b>HOLD FOR STUTTER</b> stutters the video while you hold the button. <b>LEARN KOALA'S STUTTER</b> lets the video follow Koala's own on-screen STUTTER after you touch it once.</li>
+</ul>
+
+<h3>Sound out</h3>
+<table>
+  <tr><th style="width:30%">Control</th><th>What it does</th></tr>
+  <tr><td>Meter</td><td>The recording's level in dB.</td></tr>
+  <tr><td>DRIVE</td><td>0 to 12 dB of gain into the recording.</td></tr>
+  <tr><td>MPC3000 OUT</td><td>An MPC3000-style clipper for a punchier sound.</td></tr>
+  <tr><td>LIMITER</td><td>Keeps peaks under -1 dB. Its threshold goes from 0 to -20 dB.</td></tr>
+  <tr><td>LISTEN</td><td>Hear the drive, clipper and limiter live instead of Koala's plain sound.</td></tr>
+</table>
+
+<h3>Recording</h3>
+<ul>
+  <li><b>RECORD</b> starts and stops a recording.</li>
+  <li><b>ARM</b> (on the floating preview) waits for your first pad hit and starts recording then.</li>
+  <li><b>FLOATING PREVIEW</b> is a small window that stays on top of Koala while you make the beat.</li>
+  <li><b>OUTPUT WINDOW (FOR OBS)</b> is a clean picture to capture in OBS for live streaming.</li>
+  <li>Files are MP4: H.264 video at 30 fps (about 11 Mbps) and AAC stereo sound at 48 kHz, 256 kbps. They are ready to upload to Instagram, TikTok and YouTube as they are.</li>
+</ul>
+
+<h2>6. Troubleshooting</h2>
+<table>
+  <tr><th style="width:30%">Problem</th><th>Try this</th></tr>
+  <tr><td>The app will not open</td><td>System Settings → Privacy &amp; Security → Open Anyway.</td></tr>
+  <tr><td>The MPC screen is blank</td><td>Install DisplayLink Manager and reconnect the MPC Touch.</td></tr>
+  <tr><td>Touches do nothing</td><td>Allow Koala Link and mpc_touchd under Accessibility, then restart Koala Link.</td></tr>
+  <tr><td>Pads or controls do nothing in Koala</td><td>Quit Koala and choose your controller again in Koala Link so it can repair the mapping.</td></tr>
+  <tr><td>No sound in a Webcam recording</td><td>Allow Koala Link under Screen &amp; System Audio Recording, and check that Sound is set to Koala.</td></tr>
+  <tr><td>No camera picture</td><td>Allow Koala Link under Camera.</td></tr>
+</table>
+
+<h2>7. Credits</h2>
+<p class="small">Koala Link is made by Savilion (SAV LAB). The Alicja Hand font, copyright 2026 Alicja Gajewski, is included with the publisher's redistribution permission. Koala Sampler, Akai MPC Touch, Ableton Push 2 and DisplayLink are names of their respective owners and are installed separately.</p>
+
+</body>
+</html>

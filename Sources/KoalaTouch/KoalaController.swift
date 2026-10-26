@@ -40,6 +40,9 @@ final class KoalaController {
     var padsSelectInKoala = false
     private(set) var selectionRevision: UInt64 = 0
     private(set) var keyboard: Keyboard = .off
+    /// Once chosen, this source owns the entire grid until Keyboard exits.
+    /// A saved editing-pad change must not turn chops into another instrument.
+    private var keyboardSourceOwned = false
     /// 16 Levels: how far OCTAVE ▲▼ moved the keys, in semitones.
     private(set) var octave = 0
     private(set) var chopPage = 0
@@ -49,6 +52,7 @@ final class KoalaController {
     private var chopCountOverride: Int?
     private var pressedButtons = Set<Int>()
     private var heldPadOns: [Int: [UInt8]] = [:]
+    private var heldPadModes: [Int: Keyboard] = [:]
     private var nextRepeat = 0.0
     private var localPlaying = false
     private var localRecording = false
@@ -258,11 +262,13 @@ final class KoalaController {
                     samplerSavedAt: Date? = nil, readTrimRevision: UInt64? = nil,
                     savedDates: [String: Date] = [:], readCommandRevision: UInt64 = 0) {
         let first = !sessionRead, old = session
+        let changedSong = first || old.name != new.name
         sessionRead = true
         session = new
         self.savedDates = savedDates
         self.readCommandRevision = readCommandRevision
-        if first || old.name != new.name {
+        if changedSong {
+            keyboardSourceOwned = false
             pendingTrims = [:]
             auditionPad = nil
             flipped = [:]; positions = [:]; lastSent = [:]; remainder = [:]
@@ -327,15 +333,21 @@ final class KoalaController {
             }
         }
         let selectionPending = commandStamps["selection"] != nil && !commandAcknowledged("selection")
-        if acceptSelection, !selectionPending, let s = new.selectedPad, (0..<64).contains(s), s != old.selectedPad || first {
+        let keyboardPending = commandStamps["keyboard"] != nil && !commandAcknowledged("keyboard")
+        if acceptSelection, !selectionPending, !keyboardSourceOwned,
+           let s = new.selectedPad, (0..<64).contains(s), s != old.selectedPad || changedSong {
             auditionPad = nil
             selected = s; chopPage = 0; chopCountOverride = nil
             // Koala's keyboard pad moved (a tap on Koala's screen): the pads follow it.
-            if case .on = keyboard, new.keyboard { keyboard = .on(s); octave = 0 }
+            if case .on = keyboard, new.keyboard, !keyboardPending { keyboard = .on(s); octave = 0 }
         }
         // Keyboard mode, when the file changes it (an unchanged value says nothing about a toggle since).
-        if first || new.keyboard != old.keyboard {
-            if new.keyboard { keyboard = .on(selected) } else if keyboard != .choosing { keyboard = .off }
+        if changedSong || (!keyboardSourceOwned && !keyboardPending && new.keyboard != old.keyboard) {
+            if new.keyboard {
+                // Enabling Keyboard can autosave before the source-pad hit.
+                // That save must not turn the chooser into playable chops.
+                if keyboard != .choosing || changedSong { keyboard = .on(selected); keyboardSourceOwned = true }
+            } else { keyboard = .off }
         }
         if let samplerSavedAt {
             self.samplerSavedAt = samplerSavedAt; samplerReadTrimRevision = readTrimRevision ?? 0
@@ -375,7 +387,7 @@ final class KoalaController {
     // MARK: Immediate command previews and saved-state reconciliation
     private func commandFile(_ key: String) -> String {
         if key.contains("/keyboard/scale") { return "song.json" }
-        if key == "selection" { return "song.json" }
+        if key == "selection" || key == "keyboard" { return "song.json" }
         if key.hasPrefix("pad:") || key.contains("/currPad/") || key.contains("#") { return "sampler/sampler.json" }
         if key.hasPrefix("fx:") || key == "flag:fxHold" { return "fx.json" }
         if key.contains("/mixer/") || key.hasPrefix("flag:mute.") || key.hasPrefix("flag:solo.") { return "mixer.json" }
@@ -388,6 +400,10 @@ final class KoalaController {
     }
     private func commandAcknowledged(_ key: String) -> Bool {
         guard let stamp = commandStamps[key], let date = savedDates[stamp.file] else { return false }
+        // A newer file timestamp alone does not confirm the chosen source or
+        // keyboard state: Koala may still be saving an earlier gesture.
+        if key == "selection", session.selectedPad != selected { return false }
+        if key == "keyboard", session.keyboard != (keyboard != .off) { return false }
         return readCommandRevision >= stamp.revision && date != stamp.previousSave && date >= stamp.sentAt && now() - stamp.movedAt >= 0.5
     }
     private func sequencePreview(_ index: Int) -> SequencePreview {
@@ -891,19 +907,22 @@ final class KoalaController {
         koalaPage = target
     }
 
-    /// Keyboard/Chopper mode pins the selected source. Its notes use a separate
-    /// channel in the Push profile and must not select mapped sample pads.
+    /// Keyboard first chooses a source using a mapped sample note. Only after
+    /// that hit do pads send keys/chops on the separate keyboard channel.
     private func keyboardPressed(send sendIt: Bool) {
         if sendIt { tap("/keyboard/toggle") }
         switch keyboard {
         case .off:
-            keyboard = .on(selected); octave = 0; chopPage = 0
+            keyboard = .choosing; octave = 0; chopPage = 0; chopCountOverride = nil
+            keyboardSourceOwned = true
             show(.pad)
-            say(chops(selected) > 0 ? "CHOPS · \(Self.padID(selected)) · MIDI 60 = CHOP 1" : "KEYBOARD · KOALA'S SELECTED PAD \(Self.padID(selected))", seconds: 6)
+            say("HIT THE SOURCE PAD · THEN PLAY ITS CHOPS / KEYS", seconds: 6)
         case .choosing, .on:
             keyboard = .off
+            keyboardSourceOwned = false
             say("KEYBOARD OFF · THE PADS ARE PADS")
         }
+        markCommand("keyboard")
     }
     private func moveOctave(_ by: Int) {
         guard case .on(let pad) = keyboard else { say("NOTE: PLAY KOALA’S SELECTED PAD AS KEYS / CHOPS"); return }
@@ -1165,6 +1184,7 @@ final class KoalaController {
         let pad = Push2Protocol.koalaPad(forPush: index)
         switch keyboard {
         case .choosing:
+            guard padInfo(pad).loaded else { say("CHOOSE A LOADED SOURCE PAD"); return }
             // This hit (the pad's own note) puts Koala's keyboard mode on it.
             hold(index, address: KoalaPushProfile.padAddress(pad), velocity: velocity)
             keyboard = .on(pad); selected = pad; auditionPad = pad; octave = 0; chopPage = 0; chopCountOverride = nil; lastHit = pad
@@ -1206,13 +1226,13 @@ final class KoalaController {
     }
     private func hold(_ index: Int, _ on: [UInt8], _ off: [UInt8]) {
         releasePad(index)
-        send(on); heldPads[index] = off; heldPadOns[index] = on
+        send(on); heldPads[index] = off; heldPadOns[index] = on; heldPadModes[index] = keyboard
     }
 
     private func releasePad(_ index: Int) {
         finishRecording(index)
         guard let off = heldPads.removeValue(forKey: index) else { return }
-        heldPadOns[index] = nil
+        heldPadOns[index] = nil; heldPadModes[index] = nil
         // Odd/small chop counts can alias physical pads onto the same MIDI
         // note. Keep it sounding until the last owner lets go.
         if !heldPads.values.contains(off) { send(off) }
@@ -1350,7 +1370,7 @@ final class KoalaController {
         for off in heldPads.values { send(off) }
         for off in heldButtons.values { send(off) }
         for i in Array(ownedFX) where fxOn[i] != nil { fxSend(i, amount: 0) }; ownedFX = []
-        heldPads = [:]; heldPadOns = [:]; heldButtons = [:]; fxPress = [:]; lowerDown = []; pressedButtons = []
+        heldPads = [:]; heldPadOns = [:]; heldPadModes = [:]; heldButtons = [:]; fxPress = [:]; lowerDown = []; pressedButtons = []
         shift = false; soloHeld = false; stripHeld = false; stripTarget = nil; stripAnchor = nil
     }
 
@@ -1373,7 +1393,7 @@ final class KoalaController {
         let time = now()
         reconcileTrims(at: time)
         reconcileCommands()
-        if repeatEnabled, time >= nextRepeat {
+        if repeatEnabled, keyboard != .choosing, time >= nextRepeat {
             nextRepeat = max(nextRepeat + 60 / max(20, bpm ?? 120) / 4, time + 0.002)
             var retriggered = Set<[UInt8]>()
             // Repeat the current editing pad last when it is still held, so
@@ -1388,7 +1408,7 @@ final class KoalaController {
                 // A pad held before entering keyboard mode must not retrigger
                 // its sample-selection mapping and move the Chopper source.
                 let channel = keyboard == .off ? 16 : keyboardChannel
-                guard Int(on[0] & 0x0F) + 1 == channel else { continue }
+                guard heldPadModes[index] == keyboard, Int(on[0] & 0x0F) + 1 == channel else { continue }
                 send(off); send(on)
                 finishRecording(index); beginRecording(index, velocity: on[2])
                 if keyboard == .off, padsSelectInKoala {
@@ -1526,11 +1546,10 @@ final class KoalaController {
     func padColors() -> [UInt8] {
         switch keyboard {
         case .on(let p) where chops(p) > 0:
-            // Its chops where its pads are, in their bank's colour; white while held; the rest dark.
-            let n = chops(p)
+            // All 64 pads belong to this Chopper, including wrapped slices.
+            // Loaded/empty sample slots and bank colours have no role here.
             return (0..<64).map { index in
-                let ordinal = chopPage * 64 + Push2Protocol.koalaPad(forPush: index)
-                return heldPads[index] != nil ? Push2Color.hit.rawValue : Push2Color.koala((ordinal % n) / 16 % 4, dim: ordinal >= n).rawValue
+                heldPads[index] != nil ? Push2Color.hit.rawValue : Push2Color.chop.rawValue
             }
         case .on:
             // 16 Levels: C bright, the pad's own pitch cream, white while held.

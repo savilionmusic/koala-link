@@ -1,7 +1,30 @@
 # Push 2 controls
 
-These bindings describe the current **v1.4.6** release (app version 1.4.6,
-build 18). The same installer supports MPC Touch and optional Push 2 preview
+Release **1.4.10, build 23** isolates Push's raw MIDI ports while Koala Link owns
+Push. The first-use prompt explains that other apps cannot see those ports
+until you quit or change controllers. Koala is reopened after isolation, and
+the bridge keeps its existing input/output connections. Disconnect/reconnect
+repeats this ordering; an on-disk receipt restores visibility on a later launch
+after a crash. No Touch port, driver or MIDI profile is isolated.
+The user confirmed the installed 1.4.10 chop-grid fix works on the physical
+Push on 2026-10-26; newly opened clients see only its translated input.
+
+After Keyboard → source-pad selection, **all 64 pads** stay on that source and
+show the same cyan chop color (white while held), including wrapped chops when
+the sample has fewer than 64 slices. Other saved editing-pad changes cannot
+replace the source until Keyboard exits or a different song loads. Sample-pad
+notes keep the original channel-16, 36–99 mapping; chops use channel 13.
+
+Local **1.4.8, build 20** fixes source selection: press **NOTE** or the upper
+**KEYBOARD** button, then hit the loaded source pad on Push. The grid blinks
+while choosing. That hit selects the sample; subsequent hits play its chops
+or keys on channel 13. Empty pads cannot start recording in this chooser.
+Keyboard again cancels/exits; repeat never retriggers the source-selection hit.
+Delayed saves must agree with the commanded keyboard state and selected pad
+before replacing them. Offline MIDI regression checks cover this flow; the user confirmed the complete
+chop-grid fix in 1.4.10 on Push. MPC routing, profile and driver are unchanged.
+
+Earlier **v1.4.6** shipped app version 1.4.6, build 18. The same installer supports MPC Touch and optional Push 2 preview
 use. The user confirmed version 1.4.5 works fine on MPC Touch on 2026-10-20;
 this does not establish Push hardware validation. Push remains a preview, and
 new gesture behavior still needs physical validation. The older
@@ -73,8 +96,9 @@ the target; touching tempo, swing or master announces its current value.
 ## Display rows
 
 The upper row is CC 102–109, left to right: **PAD, EQ, FX, MIXER, SEQ,
-KEYBOARD, LOAD, SETTINGS**. The first five select a screen. KEYBOARD toggles
-Koala's keyboard mode for its selected pad; LOAD opens Koala's load view; SETTINGS opens settings.
+KEYBOARD, LOAD, SETTINGS**. The first five select a screen. KEYBOARD enters source
+selection: hit a loaded pad on Push, then play its chops/keys. Press KEYBOARD
+again to cancel or exit. LOAD opens Koala's load view; SETTINGS opens settings.
 Browse also opens Load, with SHIFT + Browse opening Export.
 
 The lower row is CC 20–27, left to right, and changes with the page:
@@ -106,7 +130,7 @@ On Perform, those same scene buttons control effects 9–16.
 | Up / Down (46/47) | Move sequence bank up/down; on FX, first switch to SEQ. |
 | Select (48) | Open Koala Edit; SHIFT + Select goes Back. |
 | Shift (49) | Modifier for the actions identified above. |
-| Note (50) | Toggle Koala keyboard mode. |
+| Note (50) | Enter Keyboard source selection, then hit a loaded pad on Push. Press again to cancel or exit. |
 | Session (51) | Open FX / Perform. |
 | Add Device (52) | Open FX / Perform (16 effects). |
 | Add Track (53) | Open Mixer. |
@@ -169,8 +193,17 @@ feedback for the new recording previews and deletion gesture is pending.
 
 ## Chopper behavior
 
-Select the source pad in Koala first, then press NOTE or the upper KEYBOARD
-button. The same verified toggle as MPC 16 LEVELS acts on Koala’s selected pad.
+Press NOTE or the upper KEYBOARD button, then hit the source pad on Push.
+The blinking grid and “HIT THE PAD TO PLAY” prompt mean the next loaded-pad
+hit selects the source; it is not a chop hit. Empty pads are ignored while
+choosing. Subsequent hits play that source's chops/keys without selecting
+other samples. Press Keyboard to exit, then Keyboard again to choose a different
+source. No mouse selection or MIDI Learn is needed. A restored song already
+in Keyboard mode starts on its saved source.
+
+While this mode is active, the complete grid belongs to that source. The pad
+lights do not show other loaded samples, empty sample slots or sample banks.
+
 If that pad is a Chopper, Push pads play its saved chops. Chop 1 is note 60; notes 60–123 address
 the first 64 chops regardless of whether the saved count is 16, 64 or 128.
 Smaller and odd counts wrap in Koala. C−1 is not chop 1. For a 128-chop sample,

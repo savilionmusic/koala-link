@@ -129,6 +129,8 @@ enum KoalaTouchArtwork {
                 try writeInstallerBackgrounds(to: URL(fileURLWithPath: args[2], isDirectory: true))
             case "--render-card" where args.count == 3:
                 try writeCard(to: URL(fileURLWithPath: args[2]))
+            case "--check-push-keyboard":
+                try PushKeyboardChecks.run()
             case "--self-check":
                 guard try KoalaMIDIProfile.offlineSelfCheck() else { throw CocoaError(.validationMissingMandatoryProperty) }
                 print("PASS: 64 routed pads match Koala's profile; the profile backs up, keeps other settings, refuses a running Koala and runs once")
@@ -140,6 +142,7 @@ enum KoalaTouchArtwork {
                 print("PASS: measured overlay targets, move/down/up events and loop prevention; no events posted")
                 guard try KoalaPushProfile.offlineSelfCheck() else { throw CocoaError(.validationMissingMandatoryProperty) }
                 print("PASS: Koala's map gets the MPC's keys back after MIDI Learn, keeps anything else learned, never a key twice; Koala's MIDI settings set (built-in device maps off); both refuse a running Koala, back up, and have nothing to do the second time")
+                try PushKeyboardChecks.run()
             default: return false
             }
             return true

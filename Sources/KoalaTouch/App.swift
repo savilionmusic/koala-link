@@ -124,6 +124,15 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         webcam?.openFloating()
     }
     private func selectController(_ selected: KoalaControllerChoice) {
+        if selected == .push2, !PushMIDIIsolation.enabled {
+            let alert = NSAlert()
+            alert.messageText = "Use Push exclusively with Koala Link?"
+            alert.informativeText = "Koala Link temporarily hides Push's raw MIDI ports from other apps so pad hits cannot trigger other Koala samples. The ports return when you quit or change controllers. Close Ableton Live and other Push apps first."
+            alert.addButton(withTitle: "Use Push with Koala Link")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            UserDefaults.standard.set(true, forKey: "IsolatePushRawMIDI")
+        }
         sessionGeneration += 1; retry?.invalidate(); retry = nil
         watch?.invalidate(); watch = nil
         if let terminationObserver { NSWorkspace.shared.notificationCenter.removeObserver(terminationObserver) }
@@ -256,13 +265,20 @@ final class KoalaTouchApp: NSObject, NSApplicationDelegate {
         catch { preparing = false; push.stop(); pushBridge = nil; say(error.localizedDescription); later(3) }
     }
     private func launchPushKoala() {
-        guard koala == nil, !launching, let screen = NSScreen.screens.first, let pushBridge else { return }
+        guard !launching, let screen = NSScreen.screens.first, let pushBridge else { return }
+        // A reconnected Push has a new raw endpoint. Reopen Koala only after
+        // that endpoint is isolated, without treating the old app's quit as a
+        // user request to end this controller session.
+        watch?.invalidate(); watch = nil
+        if let terminationObserver { NSWorkspace.shared.notificationCenter.removeObserver(terminationObserver) }
+        terminationObserver = nil; koala = nil
         launching = true; let generation = sessionGeneration
         let integration = KoalaIntegration(); self.integration = integration
         integration.onStatus = { [weak self] text in
             guard let self, self.sessionGeneration == generation else { return }; self.say(text)
         }
-        integration.open(on: screen, accessibilityOptional: true, placeWindow: false, profileMode: .push2) { [weak self] result in
+        integration.open(on: screen, accessibilityOptional: true, placeWindow: false, profileMode: .push2,
+                         forceRestart: PushMIDIIsolation.enabled) { [weak self] result in
             guard let self, self.sessionGeneration == generation, self.controllerChoice == .push2 else { return }
             self.launching = false
             switch result {

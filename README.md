@@ -1,14 +1,14 @@
 # Koala Link
 
 Use Koala Sampler with an Akai MPC Touch or Ableton Push 2. Koala Link is free
-to download and use. The current release is **v1.4.7** (app version **1.4.7**,
-build **19**). MPC Touch is supported; Push 2 remains a preview and is not
+to download and use. The current release is **v1.4.10** (app version **1.4.10**,
+build **23**). MPC Touch is supported; Push 2 remains a preview and is not
 validated as a supported controller.
 
-**[Download Koala Link v1.4.7](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.7)** · [Manual (PDF)](https://github.com/savilionmusic/koala-link/releases/download/v1.4.7/Koala-Link-1.4.7-Manual.pdf) · [Push 2 controls](docs/PUSH2-CONTROLS.md) · [Push 2 validation notes](docs/PUSH2-RESEARCH.md)
+**[Download Koala Link v1.4.10](https://github.com/savilionmusic/koala-link/releases/tag/v1.4.10)** · [Manual (PDF)](https://github.com/savilionmusic/koala-link/releases/download/v1.4.10/Koala-Link-1.4.10-Manual.pdf) · [Push 2 controls](docs/PUSH2-CONTROLS.md) · [Push 2 validation notes](docs/PUSH2-RESEARCH.md)
 
-The earlier **v1.4.6**, **v1.4.5-preview.1** and **v1.4.5** releases are
-historical; the current public release is **v1.4.7**.
+The earlier **v1.4.7**, **v1.4.6**, **v1.4.5-preview.1** and **v1.4.5** releases are
+historical; the current public release is **v1.4.10**.
 
 ![Koala Link controller choice](docs/screens/Koala-Link-Controller-Choice.png)
 
@@ -26,17 +26,34 @@ historical; the current public release is **v1.4.7**.
   Recording permission. macOS may ask for Open Anyway because the app is not
   notarized.
 
-## Webcam recording in v1.4.7
+## Push chop grid in v1.4.10
+
+Press **NOTE** or **KEYBOARD**, hit the loaded source sample on Push, then
+play its chops across all 64 pads. The chosen sample stays selected, with
+one cyan chop grid and white held pads. Other loaded samples no longer take
+over. Press Keyboard again to exit; re-enter to choose another source.
+
+On first use, approve Push's exclusive session prompt. Koala Link temporarily
+hides Push's raw MIDI ports from other apps and reopens Koala so each pad hit
+arrives through the translated input once. Quit Koala Link or change controllers
+to restore the ports. If the app crashes, reopen it and choose Push to recover.
+Close Ableton Live and other Push apps before starting.
+
+The user confirmed the chop-grid fix on physical Push hardware. Push remains a
+preview; this confirmation does not validate every Push control. The accepted
+MPC Touch profile and signed driver are unchanged.
+
+## Webcam recording (introduced in v1.4.7)
 
 Record yourself playing with Koala's sound, the pad you hit and its waveform
 on screen. Choose 16:9 or 9:16 for Reels, TikTok and Shorts. The MP4 files
 export at 1080×1920 in H.264 and AAC, ready to upload. See the
-[Koala Link manual (PDF)](https://github.com/savilionmusic/koala-link/releases/download/v1.4.7/Koala-Link-1.4.7-Manual.pdf)
+[Koala Link manual (PDF)](https://github.com/savilionmusic/koala-link/releases/download/v1.4.10/Koala-Link-1.4.10-Manual.pdf)
 for setup and recording details.
 
 ## Install
 
-1. Download **Koala-Link-1.4.7-Installer.pkg** from Releases and run it.
+1. Download **Koala-Link-1.4.10-Installer.pkg** from Releases and run it.
 2. Open Koala Link from Applications and choose your controller. Connect and
    power the Push 2 before choosing it; connect the MPC Touch before choosing it.
 3. On a new Koala installation, Koala Link opens Koala once to create its settings.
@@ -136,8 +153,8 @@ older reads cannot pull back a more recent edit. START's effect on the other
 boundary is learned from conclusive saved results for each Koala version.
 The original **1.4.0-preview.1** (app 1.4.0, build 8) was the first Push
 preview. The **v1.4.5-preview.1**, **v1.4.5**, and **v1.4.6** releases are
-historical; the download link above points to **v1.4.7**. Push physical
-validation remains pending.
+historical; the download link above points to **v1.4.10**. The 1.4.10 chop-grid
+fix is confirmed on physical Push; other preview gestures still need validation.
 
 Install Xcode Command Line Tools, then run:
 
