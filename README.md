@@ -183,7 +183,7 @@ service is shared with Paper Cut, and is retained when Paper Cut is installed.
 ## Credits
 
 Created by Savilion. Alicja Hand font credit: copyright 2026 Alicja Gajewski,
-included with the publisher's redistribution permission. See [NOTICE.md](NOTICE.md).
+included with the publisher's redistribution permission. See [NOTICE.md](NOTICE.md). Code licence: [MIT](LICENSE), excluding the fonts.
 
 Koala Link is an independent companion app for Koala Sampler and supported controllers.
 
