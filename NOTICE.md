@@ -1,5 +1,7 @@
 # Credits and third-party material
 
+Koala Link's source code is released under the MIT License (see [LICENSE](LICENSE)). The fonts and third-party names described below are excluded from that licence.
+
 Koala Link and the MPC touchscreen tools are maintained by Savilion.
 
 ## Alicja Hand
