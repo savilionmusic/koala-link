@@ -22,6 +22,18 @@
 .savi-software-brand-copy h1 { margin:0 0 16px; line-height:1; }
 .savi-software-brand-copy .savi-software-brand-tagline { margin:0; font-size:22px; font-weight:500; line-height:1.4; letter-spacing:-.02em; }
 .savi-software-intro>.savi-software-brand-support { margin:0; color:var(--savi-ink-soft); font-size:18px; max-width:38ch; }
+.savi-software-library { margin:0 24px 32px; padding:24px; border:1px solid var(--savi-border); border-radius:4px; background:var(--savi-case-dark); }
+.savi-software-library-heading { display:flex; justify-content:space-between; align-items:end; gap:24px; margin-bottom:20px; }
+.savi-software-library-heading .savi-software-eyebrow { margin:0 0 8px; color:var(--savi-ink-soft); }
+.savi-software-library-heading h2 { font-size:clamp(28px,3vw,38px); }
+.savi-software-library-heading>p { margin:0; color:var(--savi-ink-soft); font-size:14px; }
+.savi-software-library-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.savi-software-library-grid article { display:flex; flex-direction:column; align-items:flex-start; padding:24px; border:1px solid var(--savi-border); background:var(--savi-case-light); }
+.savi-library-meta { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; width:100%; color:var(--savi-ink-soft); font:600 11px/1.4 var(--savi-mono); letter-spacing:.04em; }
+.savi-software-library-grid h3 { margin:16px 0 8px; font-size:28px; }
+.savi-software-library-grid article>p { margin:0 0 20px; color:var(--savi-ink-soft); font-size:14px; }
+.savi-library-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px 18px; margin-top:auto; }
+@media(max-width:767px) { .savi-software-library { margin:0 16px 24px; padding:20px; }.savi-software-library-heading { align-items:flex-start; flex-direction:column; gap:8px; }.savi-software-library-grid { grid-template-columns:1fr; }.savi-software-library-grid article { padding:20px; } }
 .savi-software-eyebrow { font-size:12px; letter-spacing:.06em; font-weight:600; text-transform:uppercase; }
 .savi-software-intro .savi-software-eyebrow { margin-bottom:20px; }
 .savi-software-updates .savi-software-eyebrow,.savi-software-section-heading .savi-software-eyebrow,.savi-software-next .savi-software-eyebrow { color:var(--savi-lab-terracotta); }
@@ -84,6 +96,28 @@ body .savi-software-field input,body .savi-software-field select { display:block
 .savi-software-success h3 { font-size:28px; margin-bottom:16px; }
 .savi-software-success:focus,.savi-software-form-status:focus { outline:none; }
 .savi-software-success .savi-software-text-link { margin-top:12px; }
+.savi-software-product-nav { display:flex; flex-wrap:wrap; align-items:center; gap:8px 24px; padding:0 48px 28px; }
+.savi-software-product-nav a { display:inline-flex; align-items:center; gap:10px; min-height:44px; color:var(--savi-ink)!important; font-size:14px; font-weight:600; text-decoration:underline; text-underline-offset:5px; }
+.savi-software-product-nav .savi-software-tag { font-size:10px; }
+.savi-software-page .savi-touch-sample { margin-top:32px; }
+.savi-touch-release { align-self:stretch; padding:28px; border:1px solid var(--savi-lab-terracotta); border-radius:4px; background:var(--savi-case-dark); }
+.savi-touch-release .savi-software-eyebrow { color:var(--savi-ink-soft); }
+.savi-touch-release h3 { font-size:30px; margin:0 0 20px; }
+.savi-touch-release>p { font-size:16px; }
+.savi-touch-prerequisites { padding-top:20px; margin-top:24px; border-top:1px solid var(--savi-border); }
+.savi-touch-prerequisites strong { display:block; margin-bottom:8px; }
+.savi-touch-prerequisites p { font-size:14px; margin-bottom:0; }
+.savi-touch-release .savi-software-text-link { margin-top:12px; }
+.savi-touch-setup { display:grid; grid-template-columns:1fr 1.35fr; gap:40px; padding:32px 24px; border-top:1px solid var(--savi-border); }
+.savi-touch-setup-heading h3 { font-size:28px; margin:0 0 16px; }
+.savi-touch-setup-heading>p:not(.savi-software-eyebrow) { font-size:14px; color:var(--savi-ink-soft); }
+.savi-touch-sample .savi-software-detail-list a { display:inline-flex; align-items:center; min-height:44px; }
+.savi-touch-sample-path { display:block; margin:0 0 16px; padding:12px; border:1px solid var(--savi-border); border-radius:3px; background:var(--savi-case); color:var(--savi-ink); font:13px/1.6 var(--savi-mono); overflow-wrap:anywhere; white-space:normal; }
+.savi-software-page .savi-touch-font-credit { margin:0; max-width:none; padding:16px 24px; border-top:1px solid var(--savi-border); }
+.savi-software-success .savi-software-choose-again { margin-top:20px; }
+#savi-software-product-note { font-family:var(--savi-mono); font-variant-numeric:tabular-nums; font-size:12px; }
+@media(max-width:767px) { .savi-software-product-nav { padding:0 24px 24px; gap:4px 20px; } .savi-touch-setup { grid-template-columns:1fr; gap:24px; padding:28px 20px; } .savi-touch-release { padding:24px; } }
+@media(max-width:480px) { .savi-software-product-nav { padding:0 20px 24px; } .savi-touch-release { padding:20px; } .savi-touch-release h3 { font-size:26px; } }
 .savi-software-push { padding:48px; border-bottom:1px solid var(--savi-border); }
 .savi-software-section-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; }
 .savi-software-section-heading p { margin:0; }

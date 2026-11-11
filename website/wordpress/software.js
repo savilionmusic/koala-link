@@ -1,12 +1,60 @@
 (function () {
   'use strict';
   var form = document.getElementById('savi-software-signup');
-  if (!form || !window.fetch || !window.FormData || !window.AbortController) return;
+  if (!form) return;
   var button = form.querySelector('button[type="submit"]');
   var status = document.getElementById('savi-software-form-status');
   var success = document.getElementById('savi-software-success');
-  var original = button.innerHTML;
+  var product = document.getElementById('savi-software-product');
+  var productNote = document.getElementById('savi-software-product-note');
+  var interest = document.getElementById('savi-software-interest');
+  var controllerField = document.getElementById('savi-software-controller-field');
+  var chooseAgain = document.getElementById('savi-software-choose-again');
+  var koalaInterest = interest ? interest.value : 'both';
   var pending = false;
+
+  function productName(key) { return key === 'touch-sample' ? 'Touch Sample' : 'Koala Link'; }
+
+  function syncProductChoice() {
+    var touchSample = product && product.value === 'touch-sample';
+    if (!pending) button.textContent = 'Unlock ' + productName(touchSample ? 'touch-sample' : 'koala-link') + ' →';
+    if (productNote) productNote.textContent = touchSample
+      ? 'Free download · Touch Sample 0.7.1 · Experimental · MPC Touch · Apple Silicon Mac · macOS 13 or later.'
+      : 'Koala Link 1.4.7 · MPC Touch supported · Push 2 preview.';
+    if (interest) {
+      if (touchSample) {
+        if (controllerField && !controllerField.hidden) koalaInterest = interest.value;
+        interest.value = 'mpc-touch';
+      } else interest.value = koalaInterest;
+    }
+    if (controllerField) controllerField.hidden = touchSample;
+  }
+
+  if (product) product.addEventListener('change', syncProductChoice);
+  if (interest) interest.addEventListener('change', function () { koalaInterest = interest.value; });
+  if (chooseAgain) chooseAgain.addEventListener('click', function (event) {
+    event.preventDefault();
+    if (pending) return;
+    form.hidden = false;
+    success.hidden = true;
+    syncProductChoice();
+    if (product) product.focus();
+  });
+  document.querySelectorAll('[data-software-product]').forEach(function (link) {
+    link.addEventListener('click', function (event) {
+      if (!product || pending) return;
+      event.preventDefault();
+      product.value = link.getAttribute('data-software-product');
+      form.hidden = false;
+      success.hidden = true;
+      syncProductChoice();
+      form.scrollIntoView({ behavior: 'auto', block: 'start' });
+      product.focus({ preventScroll: true });
+    });
+  });
+  syncProductChoice();
+  if (!window.fetch || !window.FormData || !window.AbortController) return;
+
   form.addEventListener('submit', async function (event) {
     event.preventDefault();
     if (pending || !form.reportValidity()) return;
@@ -15,26 +63,39 @@
     form.setAttribute('aria-busy', 'true');
     button.textContent = 'Preparing your download…';
     status.textContent = '';
+    status.classList.remove('is-error');
     var data = new FormData(form);
+    var requestedProduct = product && product.value === 'touch-sample' ? 'touch-sample' : 'koala-link';
     data.set('ajax', '1');
+    if (product) product.disabled = true;
     var controller = new AbortController();
     var timeout = setTimeout(function () { controller.abort(); }, 20000);
     try {
       var response = await fetch(form.getAttribute('action'), { method: 'POST', body: data, credentials: 'same-origin', signal: controller.signal, headers: { 'Accept': 'application/json' } });
       var result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.data && result.data.message ? result.data.message : 'We could not save your signup. Please try again.');
+      var selectedProduct = result.data && result.data.product === 'touch-sample' ? 'touch-sample' : 'koala-link';
+      if (selectedProduct !== requestedProduct) throw new Error('The download choice changed. Refresh the page and try again.');
       var updateStatus = result.data && result.data.updates ? result.data.updates : (result.data && result.data.subscribed ? 'joined' : 'not-added');
       var eyebrow = success.querySelector('.savi-software-eyebrow');
       var heading = success.querySelector('h3');
       var message = success.querySelector('p:not(.savi-software-eyebrow):not(.savi-software-small)');
       if (eyebrow) eyebrow.textContent = updateStatus === 'pending' ? 'SAV LAB / CONFIRM SOFTWARE UPDATES' : (updateStatus === 'joined' ? 'SAV LAB / UPDATES JOINED' : 'SAV LAB / DOWNLOAD READY');
-      if (heading) heading.textContent = updateStatus === 'pending' ? 'Check your inbox.' : (updateStatus === 'joined' ? 'You’re on the updates list.' : 'Koala Link is ready.');
+      if (heading) heading.textContent = updateStatus === 'pending' ? 'Check your inbox.' : (updateStatus === 'joined' ? 'You’re on the updates list.' : productName(selectedProduct) + ' is ready.');
       if (message) {
         if (updateStatus === 'pending') message.textContent = 'Your download is ready now. Follow MailerLite’s confirmation email to receive software updates.';
         else if (updateStatus === 'joined') message.textContent = 'Your download is ready, and your email is on the software updates list.';
         else if (updateStatus === 'sync-error') message.textContent = 'Your download is ready, but we could not complete the software updates signup. You can try again using the form.';
         else message.textContent = 'Your download is ready. Your address has not been added to the updates list.';
       }
+      success.querySelectorAll('[data-download-product]').forEach(function (group) {
+        group.hidden = group.getAttribute('data-download-product') !== selectedProduct;
+        if (!group.hidden) {
+          var installer = group.querySelector('[data-installer]');
+          var downloadKey = selectedProduct === 'touch-sample' ? 'touch-sample' : 'stable';
+          if (installer && result.data.downloads && result.data.downloads[downloadKey]) installer.href = result.data.downloads[downloadKey];
+        }
+      });
       form.hidden = updateStatus !== 'sync-error';
       success.hidden = false;
       success.focus();
@@ -46,7 +107,8 @@
       clearTimeout(timeout);
       pending = false;
       button.disabled = false;
-      button.innerHTML = original;
+      if (product) product.disabled = false;
+      syncProductChoice();
       form.removeAttribute('aria-busy');
     }
   });

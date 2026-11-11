@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Savilion Software
  * Description: Software page and consent-based software update signups.
- * Version: 1.0.5
+ * Version: 1.0.6
  */
 if (!defined('ABSPATH')) { exit; }
 
@@ -142,7 +142,21 @@ add_action('wp_enqueue_scripts', function () {
 function savi_software_downloads() {
     $base = content_url('/uploads/software/koala-link/');
     $installer = $base . 'Koala-Link-1.4.7-Installer.pkg';
-    return array('stable' => $installer, 'preview' => $installer);
+    return array(
+        'stable' => $installer,
+        'preview' => $installer,
+        'touch-sample' => content_url('/uploads/software/touch-sample/Touch-Sample-0.7.1-Installer.pkg'),
+    );
+}
+
+function savi_software_selected_product($request) {
+    // Missing product keeps the original Koala Link flow, including Statis.
+    return isset($request['software_product']) && is_string($request['software_product']) && $request['software_product'] === 'touch-sample'
+        ? 'touch-sample' : 'koala-link';
+}
+
+function savi_software_product_name($product) {
+    return $product === 'touch-sample' ? 'Touch Sample' : 'Koala Link';
 }
 
 if (!defined('SAVI_MAILERLITE_GROUP_ID')) {
@@ -238,12 +252,13 @@ function savi_software_ticket_valid($ticket) {
 
 function savi_software_response($ok, $message, $code = 200, $updates_status = null) {
     nocache_headers();
+    $product = savi_software_selected_product($_POST);
     if (!in_array($updates_status, array('joined', 'pending', 'not-added', 'sync-error'), true)) {
         $updates_status = !empty($_POST['consent']) && $_POST['consent'] === 'yes' ? 'pending' : 'not-added';
     }
     $subscribed = in_array($updates_status, array('joined', 'pending'), true);
     if (!empty($_POST['ajax'])) {
-        if ($ok) { wp_send_json_success(array('message' => $message, 'downloads' => savi_software_downloads(), 'subscribed' => $subscribed, 'updates' => $updates_status), $code); }
+        if ($ok) { wp_send_json_success(array('message' => $message, 'downloads' => savi_software_downloads(), 'product' => $product, 'subscribed' => $subscribed, 'updates' => $updates_status), $code); }
         wp_send_json_error(array('message' => $message), $code);
     }
     if (savi_software_is_statis_request()) {
@@ -255,7 +270,8 @@ function savi_software_response($ok, $message, $code = 200, $updates_status = nu
         exit;
     }
     if (!$ok) { wp_die(esc_html($message) . '<p><a href="' . esc_url(home_url('/software/#software-updates')) . '">Return to software downloads</a></p>', 'Software updates', array('response' => $code)); }
-    wp_safe_redirect(home_url('/software/?signup=complete&updates=' . $updates_status . '#software-updates'), 303);
+    $product_query = $product === 'touch-sample' ? '&software_product=touch-sample' : '';
+    wp_safe_redirect(home_url('/software/?signup=complete&updates=' . $updates_status . $product_query . '#software-updates'), 303);
     exit;
 }
 
@@ -284,6 +300,11 @@ function savi_software_signup() {
         }
     }
     if (!empty($_POST['company_website'])) { savi_software_response(false, 'We could not process that request. Please use the form again.', 400); }
+    if (isset($_POST['software_product']) && (!is_string($_POST['software_product']) || !in_array($_POST['software_product'], array('koala-link', 'touch-sample'), true))) {
+        savi_software_response(false, 'Choose Koala Link or Touch Sample and try again.', 400);
+    }
+    $product = savi_software_selected_product($_POST);
+    $product_name = savi_software_product_name($product);
     $email = isset($_POST['email']) && is_string($_POST['email']) ? strtolower(trim(wp_unslash($_POST['email']))) : '';
     if (strlen($email) > 254 || !is_email($email)) { savi_software_response(false, 'Enter a valid email address, such as you@example.com.', 400); }
     // A salted, short-lived IP hash limits abuse without retaining visitors' IP addresses.
@@ -296,10 +317,11 @@ function savi_software_signup() {
     set_transient($rate_key, $rate, max(1, $rate['until'] - time()));
     $consent = !empty($_POST['consent']) && $_POST['consent'] === 'yes';
     if (!$consent) {
-        savi_software_response(true, 'Your Koala Link download is ready.', 200, 'not-added');
+        savi_software_response(true, 'Your ' . $product_name . ' download is ready.', 200, 'not-added');
     }
     $interest = isset($_POST['interest']) && is_string($_POST['interest']) ? sanitize_key($_POST['interest']) : 'both';
     if (!in_array($interest, array('mpc-touch', 'push-2', 'both'), true)) { $interest = 'both'; }
+    if ($product === 'touch-sample') { $interest = 'mpc-touch'; }
     global $wpdb;
     $table = savi_software_table();
     $now = current_time('mysql', true);
@@ -326,7 +348,7 @@ function savi_software_signup() {
     }
     $mailerlite = savi_software_mailerlite_sync($email);
     if (!$mailerlite['ok']) {
-        savi_software_response(true, 'Your Koala Link download is ready, but we could not complete the software updates signup. Please try again later.', 200, 'sync-error');
+        savi_software_response(true, 'Your ' . $product_name . ' download is ready, but we could not complete the software updates signup. Please try again later.', 200, 'sync-error');
     }
     if ($mailerlite['status'] === 'pending') {
         savi_software_response(true, 'Your download is ready. Check your inbox to confirm software updates.', 200, 'pending');
@@ -334,7 +356,7 @@ function savi_software_signup() {
     if ($mailerlite['status'] === 'not-added') {
         savi_software_response(true, 'Your download is ready. Your address has not been added to the updates list.', 200, 'not-added');
     }
-    savi_software_response(true, 'Your Koala Link download is ready. You’re on the software updates list.', 200, 'joined');
+    savi_software_response(true, 'Your ' . $product_name . ' download is ready. You’re on the software updates list.', 200, 'joined');
 }
 
 function savi_software_unsubscribe_url($id) {

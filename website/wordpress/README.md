@@ -10,6 +10,43 @@ send software updates is a separate, optional choice. Standard controls are
 mapped automatically after choosing the controller; first-time Koala settings
 initialization is handled by the app, with guidance for any native setup dialogs.
 
+## Touch Sample (added 2026-11-02)
+
+The same page also offers **Touch Sample 0.7.1 — Experimental**, free for Apple
+Silicon Macs running macOS 13 or later with an MPC Touch. It is independent
+software that runs stock MPC Sample firmware inside an emulator. The download
+includes no Akai firmware, factory library or personal samples, and does not
+flash firmware onto the controller. Users supply the official MPC Sample 1.3.0
+Mac updater; local setup checks firmware 1.3.0.12 and builds the emulator.
+The existing working touch driver and DisplayLink Manager are prerequisites;
+Touch Sample's installer does not install them. Clean-Mac installation has not
+been fully tested, and audio clicks/latency remain known issues.
+Per the user's November 2 direction, Touch Sample's product heading uses the
+same Space Grotesk font, size and weight as Koala Link. Alicja Hand remains in
+the SAV LAB branding, with its credit retained.
+
+Exact assets from the public [v0.7.1 release](https://github.com/savilionmusic/touch-sample/releases/tag/v0.7.1)
+are hosted under `wp-content/uploads/software/touch-sample/`, preserving names:
+
+- `Touch-Sample-0.7.1-Installer.pkg` — 497,051 bytes, SHA-256
+  `a99f7fb9945e00091e673da224efb45aa8f1796705836b781a5689bbd0ff45e6`.
+- `Touch-Sample-README.html` — 24,222 bytes, SHA-256
+  `4d264c427a2005c2a745e2dce528cac93f3f89c0eef0ef427b21dcc1b4b7c78a`.
+- `SHA256SUMS.txt` — unchanged release checksum file.
+
+The setup README is public before the email unlock. The new `software_product` field is
+`koala-link` or `touch-sample`; missing values retain Koala Link for old forms
+and Statis. `savi_software_downloads()` retains `stable` and `preview` unchanged
+and adds `touch-sample`. JSON responses add the selected `product`; the non-JS
+Touch Sample success redirect carries `software_product=touch-sample`. The page preselects
+Touch Sample from that query or its product CTA, shows its correct installer
+and experimental notice, and allows another choice without losing the email.
+Touch Sample's controller preference is MPC Touch. No subscriber schema,
+marketing consent text, privacy wording, MailerLite sync or unsubscribe code
+was changed. Do not offer the Alicja Hand font files as downloads. Do not rename
+the form/query field to `product`: WooCommerce reserves that query variable
+and would route the software form to a product 404 before its handler runs.
+
 The page presents **SAV LAB** as Savilion's software brand, using the supplied
 Alicja Hand Bold horizontal wordmark and fonts with terracotta `#A94F39`, cream `#F5EBDD`, and
 charcoal. Its brand styling is scoped to `.savi-software-page`. The follow
